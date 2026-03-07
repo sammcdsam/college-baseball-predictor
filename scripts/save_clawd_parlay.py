@@ -115,24 +115,26 @@ def save_to_db(parlay, date_str):
     # Delete any existing Claude's Parlay for today
     conn.execute("DELETE FROM tracked_bets WHERE date = ? AND strategy = 'clawd_parlay'", (date_str,))
 
+    notes_json = json.dumps({
+        'legs': parlay['legs'],
+        'overall_reasoning': parlay.get('overall_reasoning', ''),
+        'confidence': parlay.get('confidence', 'medium'),
+        'num_legs': len(parlay['legs']),
+        'decimal_odds': parlay.get('decimal_odds'),
+        'payout': parlay.get('payout'),
+    })
+
     conn.execute("""
-        INSERT INTO tracked_bets (date, game_id, strategy, pick, bet_type, odds, stake, 
-                                  model_prob, edge, notes, created_at)
-        VALUES (?, ?, 'clawd_parlay', ?, 'PARLAY', ?, 5, ?, 0, ?, ?)
+        INSERT INTO tracked_bets (date, game_id, pick_team_id, strategy, pick_team_name, bet_type,
+                                  moneyline, stake, model_prob, edge, notes, created_at)
+        VALUES (?, ?, 'clawd_parlay', 'clawd_parlay', ?, 'PARLAY', ?, 5, ?, 0, ?, ?)
     """, (
         date_str,
         parlay['legs'][0]['game_id'],
         json.dumps([l['pick'] for l in parlay['legs']]),
         parlay['combined_odds_american'],
         parlay.get('model_prob', 0),
-        json.dumps({
-            'legs': parlay['legs'],
-            'overall_reasoning': parlay.get('overall_reasoning', ''),
-            'confidence': parlay.get('confidence', 'medium'),
-            'num_legs': len(parlay['legs']),
-            'decimal_odds': parlay.get('decimal_odds'),
-            'payout': parlay.get('payout'),
-        }),
+        notes_json,
         datetime.utcnow().isoformat()
     ))
     conn.commit()

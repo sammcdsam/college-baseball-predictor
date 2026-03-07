@@ -612,6 +612,12 @@ def write_change_to_db(change):
             conn.close()
             return
 
+        # Guard: don't set in-progress without scores (ESPN marks games live before data arrives)
+        if db_status == 'in-progress' and (home_score is None or away_score is None):
+            log.debug('Skipping in-progress with null scores for %s', game_id)
+            conn.close()
+            return
+
         if db_status == 'in-progress':
             game_row = conn.execute('SELECT date FROM games WHERE id = ?', (game_id,)).fetchone()
             if game_row:
