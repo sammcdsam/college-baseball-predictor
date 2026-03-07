@@ -420,8 +420,8 @@ def update_scores(date_str=None):
             from schedule_gateway import ScheduleGateway
             gw = ScheduleGateway(conn)
 
-            # Guard: never write 'final' without actual scores
-            if db_status == 'final' and (home_score is None or away_score is None):
+            # Guard: never write 'final' or 'in-progress' without actual scores
+            if db_status in ('final', 'in-progress') and (home_score is None or away_score is None):
                 continue
 
             # DH guard: don't touch gm2 if gm1 isn't final yet
