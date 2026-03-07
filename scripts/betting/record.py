@@ -9,22 +9,33 @@ DB_PATH = 'data/baseball.db'
 
 
 def build_parlay(results: dict) -> dict:
-    """Build a 3-leg parlay from the day's highest-confidence picks.
+    """Build Claude's Parlay — up to 6 legs, minimum +1200 combined odds.
     
-    v2 strategy changes (2026-03-04):
-    - Kept at 4 legs (more fun, bigger payouts)
-    - Use meta_ensemble probability instead of old consensus (which was 38% accurate)
-    - Require minimum 72% model probability per leg (was 62%)
-    - Minimum 8% edge per leg (was 5%)
-    - No totals legs (they're harder to predict and drag down parlay probability)
-    - Score by meta_ensemble_prob * edge (higher = more confident + more value)
+    v3 strategy changes (2026-03-07):
+    - Up to 6 legs (was fixed at 4)
+    - Minimum +1200 combined American odds (new requirement)
+    - Tries 3-6 leg counts, picks the combo that maximizes model probability
+      while meeting the +1200 floor
+    - Use meta_ensemble probability
+    - Require minimum 72% model probability per leg
+    - Minimum 8% edge per leg
+    - No totals legs
+    - Score by meta_ensemble_prob * edge
     """
     PARLAY_ML_CAP = -250       # Skip heavy favorites (juiced lines)
     PARLAY_MIN_PROB = 0.72     # Higher floor — each leg must be strong
     PARLAY_MAX_PROB = 0.92     # Cap to avoid overfit high-confidence busts
     PARLAY_MIN_EDGE = 8.0      # Meaningful edge required
     PARLAY_BET = 25
-    PARLAY_LEGS = 4
+    PARLAY_MIN_LEGS = 3
+    PARLAY_MAX_LEGS = 6
+    MIN_AMERICAN_ODDS = 1200   # +1200 minimum combined odds
+
+    def ml_to_decimal(ml):
+        return 1 + ml / 100 if ml > 0 else 1 + 100 / abs(ml)
+
+    def decimal_to_american(dec):
+        return round((dec - 1) * 100) if dec > 2 else round(-100 / (dec - 1))
 
     # Use pre-correlation-cap bets if available (parlay is flat $25, independent of Kelly sizing)
     source_bets = results.get('parlay_candidates', results['bets'])
@@ -46,14 +57,14 @@ def build_parlay(results: dict) -> dict:
         ml_candidates.append({**b, 'parlay_score': parlay_score, 'parlay_prob': prob})
     ml_candidates.sort(key=lambda x: x['parlay_score'], reverse=True)
 
-    # v2: ML-only legs, no totals (totals legs were unreliable in parlays)
-    legs = []
+    # Build candidate legs (unique games only)
+    candidate_legs = []
     used_ids = set()
     for c in ml_candidates:
-        if len(legs) >= PARLAY_LEGS:
+        if len(candidate_legs) >= PARLAY_MAX_LEGS:
             break
         if c['game_id'] not in used_ids:
-            legs.append({
+            candidate_legs.append({
                 'type': c['type'],
                 'game_id': c['game_id'],
                 'date': c.get('date', ''),
@@ -65,29 +76,55 @@ def build_parlay(results: dict) -> dict:
             })
             used_ids.add(c['game_id'])
 
-    if len(legs) < 3:  # Need at least 3 legs; prefer 4
+    if len(candidate_legs) < PARLAY_MIN_LEGS:
         return None
 
-    def ml_to_decimal(ml):
-        return 1 + ml / 100 if ml > 0 else 1 + 100 / abs(ml)
+    # Try building parlays from 3 legs up to max available.
+    # Use the top-N candidates (already sorted by parlay_score).
+    # Pick the largest leg count that hits the +1200 floor.
+    # If none hit +1200, try progressively more legs until we do.
+    best_parlay = None
+    for n_legs in range(PARLAY_MIN_LEGS, len(candidate_legs) + 1):
+        legs = candidate_legs[:n_legs]
+        decimal_odds = 1.0
+        combined_prob = 1.0
+        for leg in legs:
+            decimal_odds *= ml_to_decimal(leg['odds'])
+            combined_prob *= leg['prob']
+        american = decimal_to_american(decimal_odds)
 
-    decimal_odds = 1.0
-    combined_prob = 1.0
-    for leg in legs:
-        decimal_odds *= ml_to_decimal(leg['odds'])
-        combined_prob *= leg['prob']
+        if american >= MIN_AMERICAN_ODDS:
+            best_parlay = {
+                'legs': legs,
+                'num_legs': len(legs),
+                'american_odds': american,
+                'decimal_odds': round(decimal_odds, 4),
+                'model_prob': round(combined_prob, 4),
+                'bet_amount': PARLAY_BET,
+                'payout': round(PARLAY_BET * decimal_odds, 2),
+            }
+            break  # Take the fewest legs that hit the floor
 
-    american = round((decimal_odds - 1) * 100) if decimal_odds > 2 else round(-100 / (decimal_odds - 1))
+    # If no combo hit +1200, fall back to max legs available (best shot)
+    if best_parlay is None and len(candidate_legs) >= PARLAY_MIN_LEGS:
+        legs = candidate_legs
+        decimal_odds = 1.0
+        combined_prob = 1.0
+        for leg in legs:
+            decimal_odds *= ml_to_decimal(leg['odds'])
+            combined_prob *= leg['prob']
+        american = decimal_to_american(decimal_odds)
+        best_parlay = {
+            'legs': legs,
+            'num_legs': len(legs),
+            'american_odds': american,
+            'decimal_odds': round(decimal_odds, 4),
+            'model_prob': round(combined_prob, 4),
+            'bet_amount': PARLAY_BET,
+            'payout': round(PARLAY_BET * decimal_odds, 2),
+        }
 
-    return {
-        'legs': legs,
-        'num_legs': len(legs),
-        'american_odds': american,
-        'decimal_odds': round(decimal_odds, 4),
-        'model_prob': round(combined_prob, 4),
-        'bet_amount': PARLAY_BET,
-        'payout': round(PARLAY_BET * decimal_odds, 2),
-    }
+    return best_parlay
 
 
 def build_longshot_parlay(date_str=None) -> dict:
