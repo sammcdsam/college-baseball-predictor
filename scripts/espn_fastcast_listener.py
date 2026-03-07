@@ -785,7 +785,8 @@ async def listen_forever():
             ws_url = await discover_ws()
             log.info('Connecting to FastCast: %s', ws_url[:80] + '...')
 
-            async with websockets.connect(ws_url, ping_interval=None,
+            async with websockets.connect(ws_url, ping_interval=20,
+                                          ping_timeout=10,
                                           close_timeout=10) as ws:
                 # Handshake
                 await ws.send(json.dumps({'op': 'C'}))
@@ -802,8 +803,18 @@ async def listen_forever():
                     await ws.send(json.dumps({'op': 'S', 'sid': sid, 'tc': topic}))
                     log.info('Subscribed to %s', topic)
 
-                # Message loop
-                async for raw in ws:
+                # Message loop with receive watchdog
+                # If no message received in 5 min, force reconnect
+                RECV_TIMEOUT = 300
+
+                while True:
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=RECV_TIMEOUT)
+                    except asyncio.TimeoutError:
+                        log.warning('No message received in %ds — forcing reconnect', RECV_TIMEOUT)
+                        await ws.close()
+                        break
+
                     msg = json.loads(raw)
                     op = msg.get('op')
                     log.debug('MSG op=%s tc=%s', op, msg.get('tc', '-'))
