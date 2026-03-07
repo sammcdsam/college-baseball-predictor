@@ -157,12 +157,10 @@ class GameNotificationDispatcher:
 
                         home_tid = teams['home_team_id']
                         away_tid = teams['away_team_id']
-                        home_name = teams['home_abbr']
-                        away_name = teams['away_abbr']
 
                         start_payload = {
-                            'title': f"🟢 Game Started: {away_name} @ {home_name}",
-                            'body': 'First pitch! Tap to follow along.',
+                            'title': f"🟢 {teams['away_abbr']} @ {teams['home_abbr']}",
+                            'body': f"{teams['away_name']} at {teams['home_name']} — First pitch!",
                             'url': f"/game/{game_id}",
                             'tag': f"start-{game_id}",
                             'game_id': game_id,
@@ -219,8 +217,10 @@ class GameNotificationDispatcher:
 
             home_tid = teams['home_team_id']
             away_tid = teams['away_team_id']
-            home_name = teams['home_abbr']
-            away_name = teams['away_abbr']
+            home_name = teams['home_name']       # Full name for body text
+            away_name = teams['away_name']
+            home_abbr = teams['home_abbr']       # Abbreviation for title
+            away_abbr = teams['away_abbr']
             home_conf = teams['home_conf']
             away_conf = teams['away_conf']
 
@@ -232,7 +232,7 @@ class GameNotificationDispatcher:
             )
             ensure_tables(self.conn)
 
-            score_line = f"{away_name} {visitor_score}, {home_name} {home_score}"
+            score_line = f"{away_abbr} {visitor_score}, {home_abbr} {home_score}"
 
             # --- 1. Legacy half-inning updates (all transitions) ---
             if half_transition:
@@ -262,8 +262,8 @@ class GameNotificationDispatcher:
                 delta_text = ', '.join(delta_bits) if delta_bits else 'Runs scored'
 
                 recap_payload = {
-                    'title': f"📌 Inning Recap: {score_line}",
-                    'body': f"{completed_half_label} • {delta_text}",
+                    'title': f"📌 {score_line}",
+                    'body': f"{delta_text} • {completed_half_label}",
                     'url': f"/game/{game_id}",
                     'tag': f"inning-score-{game_id}",
                     'game_id': game_id,
@@ -304,7 +304,7 @@ class GameNotificationDispatcher:
                 delta_text = ', '.join(delta_bits) if delta_bits else 'Score changed'
 
                 score_payload = {
-                    'title': f"🚨 Score Change: {score_line}",
+                    'title': f"🚨 {score_line}",
                     'body': f"{delta_text} • {inning_label}",
                     'url': f"/game/{game_id}",
                     'tag': f"score-change-{game_id}",
@@ -432,12 +432,12 @@ class GameNotificationDispatcher:
             away_abbr = get_team_abbr(away_tid, away_name)
 
             extra = f" ({innings})" if innings and innings > 9 else ""
-            winner = home_abbr if h_score > a_score else away_abbr
+            winner_full = home_name if h_score > a_score else away_name
             score_line = f"{away_abbr} {a_score}, {home_abbr} {h_score}"
 
             final_payload = {
                 'title': f"🏁 Final{extra}: {score_line}",
-                'body': f"{winner} wins!",
+                'body': f"{winner_full} wins!",
                 'url': f"/game/{game_id}",
                 'tag': f"final-{game_id}",
                 'game_id': game_id,

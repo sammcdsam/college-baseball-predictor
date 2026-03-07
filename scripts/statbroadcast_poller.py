@@ -1145,14 +1145,14 @@ class StatBroadcastPoller:
             if half_transition and scored_in_completed_half:
                 delta_bits = []
                 if half_delta_away > 0:
-                    delta_bits.append(f"{away_abbr} +{half_delta_away}")
+                    delta_bits.append(f"{away_name} +{half_delta_away}")
                 if half_delta_home > 0:
-                    delta_bits.append(f"{home_abbr} +{half_delta_home}")
+                    delta_bits.append(f"{home_name} +{half_delta_home}")
                 delta_text = ', '.join(delta_bits) if delta_bits else 'Runs scored'
 
                 recap_payload = {
-                    'title': f"📌 Inning Recap: {score_line}",
-                    'body': f"{completed_half_label} • {delta_text}",
+                    'title': f"📌 {score_line}",
+                    'body': f"{delta_text} • {completed_half_label}",
                     'url': f"/game/{game_id}",
                     'tag': f"inning-score-{game_id}",
                     'game_id': game_id,
@@ -1187,13 +1187,13 @@ class StatBroadcastPoller:
             if score_changed and runs_scored_now:
                 delta_bits = []
                 if away_delta > 0:
-                    delta_bits.append(f"{away_abbr} +{away_delta}")
+                    delta_bits.append(f"{away_name} +{away_delta}")
                 if home_delta > 0:
-                    delta_bits.append(f"{home_abbr} +{home_delta}")
+                    delta_bits.append(f"{home_name} +{home_delta}")
                 delta_text = ', '.join(delta_bits) if delta_bits else 'Score changed'
 
                 score_payload = {
-                    'title': f"🚨 Score Change: {score_line}",
+                    'title': f"🚨 {score_line}",
                     'body': f"{delta_text} • {inning_label}",
                     'url': f"/game/{game_id}",
                     'tag': f"score-change-{game_id}",
@@ -1297,13 +1297,17 @@ class StatBroadcastPoller:
             h_score, a_score = row[4], row[5]
             innings = row[6]
 
+            from notifications import get_team_abbr
+            home_abbr = get_team_abbr(home_tid, home_name)
+            away_abbr = get_team_abbr(away_tid, away_name)
+
             extra = f" ({innings})" if innings and innings > 9 else ""
-            winner = home_name if h_score > a_score else away_name
-            score_line = f"{away_name} {a_score}, {home_name} {h_score}"
+            winner_full = home_name if h_score > a_score else away_name
+            score_line = f"{away_abbr} {a_score}, {home_abbr} {h_score}"
 
             final_payload = {
                 'title': f"🏁 Final{extra}: {score_line}",
-                'body': f"{winner} wins!",
+                'body': f"{winner_full} wins!",
                 'url': f"/game/{game_id}",
                 'tag': f"final-{game_id}",
                 'game_id': game_id,
