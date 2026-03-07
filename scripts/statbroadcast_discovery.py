@@ -191,10 +191,32 @@ def match_game(sb_event_info, conn, resolver=None):
         if len(rows) == 1:
             # Unambiguous: team only has one game on this date
             game_id = rows[0][0] if isinstance(rows[0], tuple) else rows[0]['id']
-            unresolved = visitor_name if home_id else home_name
+            unresolved_name = visitor_name if home_id else home_name
+            # Safety check: if the unresolved team name DOES resolve to a known team
+            # that is NOT part of this game, reject the match (likely wrong sport)
+            other_id = resolver.resolve(unresolved_name)
+            if other_id:
+                game_row = conn.execute(
+                    "SELECT home_team_id, away_team_id FROM games WHERE id = ?",
+                    (game_id,)
+                ).fetchone()
+                if game_row:
+                    expected = set()
+                    if isinstance(game_row, tuple):
+                        expected = {game_row[0], game_row[1]}
+                    else:
+                        expected = {game_row['home_team_id'], game_row['away_team_id']}
+                    if other_id not in expected:
+                        logger.warning(
+                            "Fallback match REJECTED: %s resolved to %s which is NOT in game %s "
+                            "(%s vs %s) — likely wrong sport (softball?)",
+                            unresolved_name, other_id, game_id,
+                            expected.pop(), expected.pop() if expected else "?",
+                        )
+                        return None
             logger.info(
                 "Fallback match: resolved %s, unresolved %r -> game %s",
-                known_id, unresolved, game_id
+                known_id, unresolved_name, game_id
             )
             return game_id
         elif len(rows) > 1:

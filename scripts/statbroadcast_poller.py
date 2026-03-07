@@ -105,7 +105,21 @@ def validate_sb_teams(situation, event, conn):
     if sb_visitor_id:
         resolved.add(sb_visitor_id)
 
-    # At least one resolved team must be in the expected set
+    # If both teams resolved, BOTH must be in the expected set
+    if sb_home_id and sb_visitor_id:
+        if resolved <= expected:
+            return True
+        # One or both resolved teams are NOT in our expected matchup — reject
+        logger.warning(
+            "SB TEAM MISMATCH for game %s (SB event %s): "
+            "SB says %s vs %s (resolved: %s vs %s), "
+            "expected %s vs %s — skipping update (wrong game/sport?)",
+            game_id, event.get('sb_event_id'),
+            sb_visitor, sb_home, sb_visitor_id, sb_home_id,
+            expected_away, expected_home,
+        )
+        return False
+    # Only one team resolved — it must be in the expected set
     if resolved & expected:
         return True
 
