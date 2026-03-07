@@ -28,6 +28,24 @@ from pywebpush import webpush, WebPushException
 logger = logging.getLogger('notifications')
 
 DATA_DIR = Path(__file__).parent.parent / 'data'
+CONFIG_DIR = Path(__file__).parent.parent / 'config'
+
+# ── Team Abbreviations ──────────────────────────────────────────────
+_team_abbr_cache = None
+
+def get_team_abbr(team_id: str, fallback: str = None) -> str:
+    """Get short abbreviation for a team (e.g., 'mississippi-state' -> 'MSST').
+    
+    Falls back to the full name if no abbreviation found.
+    """
+    global _team_abbr_cache
+    if _team_abbr_cache is None:
+        abbr_file = CONFIG_DIR / 'team_abbreviations.json'
+        if abbr_file.exists():
+            _team_abbr_cache = json.loads(abbr_file.read_text())
+        else:
+            _team_abbr_cache = {}
+    return _team_abbr_cache.get(team_id, fallback or team_id)
 DB_PATH = DATA_DIR / 'baseball.db'
 VAPID_PATH = DATA_DIR / 'vapid_keys.json'
 

@@ -1112,12 +1112,16 @@ class StatBroadcastPoller:
             home_conf = row[4] if isinstance(row, tuple) else row['home_conf']
             away_conf = row[5] if isinstance(row, tuple) else row['away_conf']
 
+            # Use abbreviations in notifications (compact for push alerts)
+            from notifications import send_team_notification, send_game_notification, ensure_tables, get_team_abbr
+            home_abbr = get_team_abbr(home_tid, home_name)
+            away_abbr = get_team_abbr(away_tid, away_name)
+
             inning_label = situation.get('inning_display', _half_label(inning, half))
 
-            from notifications import send_team_notification, send_game_notification, ensure_tables
             ensure_tables(self.conn)
 
-            score_line = f"{away_name} {visitor_score}, {home_name} {home_score}"
+            score_line = f"{away_abbr} {visitor_score}, {home_abbr} {home_score}"
 
             # --- 1. Legacy half-inning updates (all transitions) ---
             if half_transition:
@@ -1141,9 +1145,9 @@ class StatBroadcastPoller:
             if half_transition and scored_in_completed_half:
                 delta_bits = []
                 if half_delta_away > 0:
-                    delta_bits.append(f"{away_name} +{half_delta_away}")
+                    delta_bits.append(f"{away_abbr} +{half_delta_away}")
                 if half_delta_home > 0:
-                    delta_bits.append(f"{home_name} +{half_delta_home}")
+                    delta_bits.append(f"{home_abbr} +{half_delta_home}")
                 delta_text = ', '.join(delta_bits) if delta_bits else 'Runs scored'
 
                 recap_payload = {
@@ -1183,9 +1187,9 @@ class StatBroadcastPoller:
             if score_changed and runs_scored_now:
                 delta_bits = []
                 if away_delta > 0:
-                    delta_bits.append(f"{away_name} +{away_delta}")
+                    delta_bits.append(f"{away_abbr} +{away_delta}")
                 if home_delta > 0:
-                    delta_bits.append(f"{home_name} +{home_delta}")
+                    delta_bits.append(f"{home_abbr} +{home_delta}")
                 delta_text = ', '.join(delta_bits) if delta_bits else 'Score changed'
 
                 score_payload = {

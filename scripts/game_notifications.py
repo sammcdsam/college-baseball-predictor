@@ -85,17 +85,24 @@ def _get_game_teams(conn: sqlite3.Connection, game_id: str):
     if not row:
         return None
 
+    from notifications import get_team_abbr
+
     if isinstance(row, tuple):
-        return {
+        d = {
             'home_team_id': row[0], 'away_team_id': row[1],
             'home_name': row[2], 'away_name': row[3],
             'home_conf': row[4], 'away_conf': row[5],
         }
-    return {
-        'home_team_id': row['home_team_id'], 'away_team_id': row['away_team_id'],
-        'home_name': row['home_name'], 'away_name': row['away_name'],
-        'home_conf': row['home_conf'], 'away_conf': row['away_conf'],
-    }
+    else:
+        d = {
+            'home_team_id': row['home_team_id'], 'away_team_id': row['away_team_id'],
+            'home_name': row['home_name'], 'away_name': row['away_name'],
+            'home_conf': row['home_conf'], 'away_conf': row['away_conf'],
+        }
+    # Add abbreviations for compact push notifications
+    d['home_abbr'] = get_team_abbr(d['home_team_id'], d['home_name'])
+    d['away_abbr'] = get_team_abbr(d['away_team_id'], d['away_name'])
+    return d
 
 
 class GameNotificationDispatcher:
@@ -150,8 +157,8 @@ class GameNotificationDispatcher:
 
                         home_tid = teams['home_team_id']
                         away_tid = teams['away_team_id']
-                        home_name = teams['home_name']
-                        away_name = teams['away_name']
+                        home_name = teams['home_abbr']
+                        away_name = teams['away_abbr']
 
                         start_payload = {
                             'title': f"🟢 Game Started: {away_name} @ {home_name}",
@@ -212,8 +219,8 @@ class GameNotificationDispatcher:
 
             home_tid = teams['home_team_id']
             away_tid = teams['away_team_id']
-            home_name = teams['home_name']
-            away_name = teams['away_name']
+            home_name = teams['home_abbr']
+            away_name = teams['away_abbr']
             home_conf = teams['home_conf']
             away_conf = teams['away_conf']
 
@@ -404,6 +411,8 @@ class GameNotificationDispatcher:
             if not row:
                 return
 
+            from notifications import get_team_abbr
+
             if isinstance(row, tuple):
                 home_tid, away_tid = row[0], row[1]
                 home_name, away_name = row[2], row[3]
@@ -418,9 +427,13 @@ class GameNotificationDispatcher:
                 a_score = row['away_score']
                 innings = row['innings']
 
+            # Use abbreviations in push alerts
+            home_abbr = get_team_abbr(home_tid, home_name)
+            away_abbr = get_team_abbr(away_tid, away_name)
+
             extra = f" ({innings})" if innings and innings > 9 else ""
-            winner = home_name if h_score > a_score else away_name
-            score_line = f"{away_name} {a_score}, {home_name} {h_score}"
+            winner = home_abbr if h_score > a_score else away_abbr
+            score_line = f"{away_abbr} {a_score}, {home_abbr} {h_score}"
 
             final_payload = {
                 'title': f"🏁 Final{extra}: {score_line}",
