@@ -37,6 +37,8 @@ SCRIPTS_DIR = Path(__file__).parent
 
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from statbroadcast_client import StatBroadcastClient, parse_situation
 from statbroadcast_discovery import ensure_table, get_active_events, mark_completed
