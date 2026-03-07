@@ -1281,6 +1281,8 @@ def get_games_for_date_with_predictions(date_str):
             game['home_team_name'] = game['home_team_id'].replace('-', ' ').title()
         if not game.get('away_team_name') and game.get('away_team_id'):
             game['away_team_name'] = game['away_team_id'].replace('-', ' ').title()
+        # Tag doubleheader Game 2
+        game['is_gm2'] = game['id'].endswith('_gm2')
         # Parse situation JSON for live game display
         if game.get('situation_json'):
             try:

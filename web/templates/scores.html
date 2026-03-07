@@ -164,6 +164,7 @@
                     <div class="d-flex justify-content-between align-items-center mb-2 game-status-row">
                         <div class="d-flex align-items-center gap-2 flex-wrap">
                             <span class="status-pill status-live">Live</span>
+                            {% if game.is_gm2 %}<span class="badge bg-secondary ms-1" style="font-size: 0.6rem;">GM 2</span>{% endif %}
                             <small class="text-muted">
                                 {% if game.time %}<span class="local-time" data-time="{{ game.time }}" data-date="{{ game.date }}">{{ game.time }}</span>{% endif %}
                             </small>
@@ -330,6 +331,7 @@
                     <div class="d-flex justify-content-between align-items-center mb-2 game-status-row">
                         <div class="d-flex align-items-center gap-2 flex-wrap">
                             <span class="status-pill status-live-muted">Live</span>
+                            {% if game.is_gm2 %}<span class="badge bg-secondary ms-1" style="font-size: 0.6rem;">GM 2</span>{% endif %}
                             <small class="text-muted">
                                 {% if game.time %}<span class="local-time" data-time="{{ game.time }}" data-date="{{ game.date }}">{{ game.time }}</span>{% endif %}
                             </small>
@@ -622,6 +624,7 @@
                                 <i class="bi bi-star"></i>
                             </button>
                             <span class="status-pill {{ status_class }}">{{ status_text|title }}</span>
+                            {% if game.is_gm2 %}<span class="badge bg-secondary ms-1" style="font-size: 0.6rem;">GM 2</span>{% endif %}
                         </div>
                     </div>
                     <div class="mb-1">
