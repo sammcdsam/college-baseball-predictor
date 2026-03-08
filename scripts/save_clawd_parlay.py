@@ -109,32 +109,29 @@ def validate_and_compute(parlay, date_str):
 
 
 def save_to_db(parlay, date_str):
-    """Save to tracked_bets table."""
+    """Save to tracked_longshot_parlays table (NOT tracked_bets)."""
     conn = sqlite3.connect(str(DB_PATH), timeout=30)
 
-    # Delete any existing Claude's Parlay for today
-    conn.execute("DELETE FROM tracked_bets WHERE date = ? AND strategy = 'clawd_parlay'", (date_str,))
+    # Clean up any legacy entries in tracked_bets
+    conn.execute("DELETE FROM tracked_bets WHERE date = ? AND pick_team_id = 'clawd_parlay'", (date_str,))
 
-    notes_json = json.dumps({
-        'legs': parlay['legs'],
-        'overall_reasoning': parlay.get('overall_reasoning', ''),
-        'confidence': parlay.get('confidence', 'medium'),
-        'num_legs': len(parlay['legs']),
-        'decimal_odds': parlay.get('decimal_odds'),
-        'payout': parlay.get('payout'),
-    })
-
+    # Save to the longshot parlays table where it belongs
+    legs_json = json.dumps(parlay['legs'])
     conn.execute("""
-        INSERT INTO tracked_bets (date, game_id, pick_team_id, strategy, pick_team_name, bet_type,
-                                  moneyline, stake, model_prob, edge, notes, created_at)
-        VALUES (?, ?, 'clawd_parlay', 'clawd_parlay', ?, 'PARLAY', ?, 5, ?, 0, ?, ?)
+        INSERT OR REPLACE INTO tracked_longshot_parlays 
+        (date, legs_json, num_legs, american_odds, decimal_odds, model_prob, 
+         bet_amount, payout, overall_reasoning, confidence, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 5, ?, ?, ?, ?)
     """, (
         date_str,
-        parlay['legs'][0]['game_id'],
-        json.dumps([l['pick'] for l in parlay['legs']]),
+        legs_json,
+        len(parlay['legs']),
         parlay['combined_odds_american'],
+        parlay.get('decimal_odds'),
         parlay.get('model_prob', 0),
-        notes_json,
+        parlay.get('payout'),
+        parlay.get('overall_reasoning', ''),
+        parlay.get('confidence', 'medium'),
         datetime.utcnow().isoformat()
     ))
     conn.commit()

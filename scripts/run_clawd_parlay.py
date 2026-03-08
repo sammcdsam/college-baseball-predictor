@@ -195,36 +195,9 @@ def save_parlay(parlay, date_str, dry_run=False):
         print(f"[DRY RUN] Would save Claude's Parlay: {len(parlay['legs'])} legs, +{parlay['combined_odds_american']}")
         return
 
-    conn = sqlite3.connect(str(DB_PATH), timeout=30)
-    conn.row_factory = sqlite3.Row
-
-    # Delete any existing Claude's Parlay for today
-    conn.execute("DELETE FROM tracked_bets WHERE date = ? AND strategy = 'clawd_parlay'", (date_str,))
-
-    conn.execute("""
-        INSERT INTO tracked_bets (date, game_id, strategy, pick, bet_type, odds, stake, 
-                                  model_prob, edge, notes, created_at)
-        VALUES (?, ?, 'clawd_parlay', ?, 'PARLAY', ?, 5, ?, ?, ?, ?)
-    """, (
-        date_str,
-        parlay['legs'][0]['game_id'],  # Primary game ID
-        json.dumps([l['pick'] for l in parlay['legs']]),
-        parlay['combined_odds_american'],
-        parlay.get('model_prob', 0),
-        0,
-        json.dumps({
-            'legs': parlay['legs'],
-            'overall_reasoning': parlay.get('overall_reasoning', ''),
-            'confidence': parlay.get('confidence', 'medium'),
-            'num_legs': len(parlay['legs']),
-            'decimal_odds': parlay.get('decimal_odds'),
-            'payout': parlay.get('payout'),
-        }),
-        datetime.utcnow().isoformat()
-    ))
-    conn.commit()
-    conn.close()
-    print(f"[Claude's Parlay] Saved: {len(parlay['legs'])} legs, +{parlay['combined_odds_american']}, payout ${parlay['payout']}")
+    # Claude's Parlay is saved to tracked_longshot_parlays by save_clawd_parlay.py
+    # Do NOT insert into tracked_bets — that pollutes the EV bets display
+    print(f"[Claude's Parlay] Ready: {len(parlay['legs'])} legs, +{parlay['combined_odds_american']}, payout ${parlay['payout']}")
 
 
 def main():
