@@ -357,13 +357,23 @@ def register_sb_events(d1b_games, date_str, slug_map, conn):
     )
 
     # Build game lookup for matching
-    game_lookup = {}
+    # DH-aware lookup: team pair -> ordered list of game IDs (gm1 first, gm2 second)
+    from collections import defaultdict
+    _pair_games = defaultdict(list)
     for r in conn.execute(
         "SELECT id, away_team_id, home_team_id FROM games WHERE date = ?",
         (date_str,),
     ).fetchall():
         d = dict(r)
-        game_lookup[(d["away_team_id"], d["home_team_id"])] = d["id"]
+        pair = (d["away_team_id"], d["home_team_id"])
+        _pair_games[pair].append(d["id"])
+    # Sort so gm1 comes before gm2
+    for pair in _pair_games:
+        _pair_games[pair].sort(key=lambda gid: (gid.endswith('_gm2'), gid))
+    # Track which games already have an SB event assigned this run
+    _assigned_games = set()
+    # Legacy compat: simple lookup returns first available game
+    game_lookup = {pair: gids[0] for pair, gids in _pair_games.items()}
 
     registered = 0
     skipped = 0
@@ -389,10 +399,17 @@ def register_sb_events(d1b_games, date_str, slug_map, conn):
                 dg.get("a"), dg.get("h"), away_id or "?", home_id or "?", sb_id,
             )
 
-        # Match to our game — try exact match first
+        # Match to our game — DH-aware: assign to first unassigned game for this pair
         game_id = None
         if away_id and home_id:
-            game_id = game_lookup.get((away_id, home_id)) or game_lookup.get((home_id, away_id))
+            for pair in [(away_id, home_id), (home_id, away_id)]:
+                candidates = _pair_games.get(pair, [])
+                for gid in candidates:
+                    if gid not in _assigned_games:
+                        game_id = gid
+                        break
+                if game_id:
+                    break
 
         # Fallback: if only one team resolved, find their game on this date
         if not game_id:
@@ -453,6 +470,8 @@ def register_sb_events(d1b_games, date_str, slug_map, conn):
         })
         registered += 1
         existing.add(sb_id)
+        if game_id:
+            _assigned_games.add(game_id)
         logger.info("  Registered SB event %s for %s @ %s (game %s)",
                      sb_id, dg["a"], dg["h"], game_id or "unmatched")
         logger.info(
