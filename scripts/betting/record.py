@@ -19,8 +19,8 @@ def build_parlay(results: dict) -> dict:
     - No totals legs (they're harder to predict and drag down parlay probability)
     - Score by meta_ensemble_prob * edge (higher = more confident + more value)
     """
-    PARLAY_ML_CAP = -250       # Skip heavy favorites (juiced lines)
-    PARLAY_MIN_PROB = 0.72     # Higher floor — each leg must be strong
+    PARLAY_ML_CAP = -400       # Allow heavier favorites on chalk-heavy days
+    PARLAY_MIN_PROB = 0.68     # Slightly lower floor to avoid filtering out close calls
     PARLAY_MAX_PROB = 0.92     # Cap to avoid overfit high-confidence busts
     PARLAY_MIN_EDGE = 8.0      # Meaningful edge required
     PARLAY_BET = 25
