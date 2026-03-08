@@ -236,8 +236,12 @@ def get_line_movement(db=None, date_str=None):
 def get_game_line_history(db, game_id):
     """Get chronological line history snapshots for a single game.
 
-    Returns list of dicts: {captured_at, home_ml, away_ml, home_prob, over_under, snapshot_type}
+    Merges pre-game betting_line_history with in-game live_odds_snapshots.
+    Returns list of dicts: {captured_at, home_ml, away_ml, home_prob, over_under,
+                            snapshot_type, inning, home_score, away_score, home_wp,
+                            dk_implied_prob}
     """
+    # Pre-game line history
     rows = db.execute("""
         SELECT home_ml, away_ml, over_under, snapshot_type, captured_at
         FROM betting_line_history
@@ -255,7 +259,44 @@ def get_game_line_history(db, game_id):
             'home_prob': round(american_to_prob(r['home_ml']) * 100, 2) if american_to_prob(r['home_ml']) is not None else None,
             'over_under': r['over_under'],
             'snapshot_type': r['snapshot_type'],
+            'inning': None,
+            'home_score': None,
+            'away_score': None,
+            'home_wp': None,
+            'dk_implied_prob': round(american_to_prob(r['home_ml']) * 100, 2) if american_to_prob(r['home_ml']) is not None else None,
         })
+
+    # Live in-game odds snapshots
+    try:
+        live_rows = db.execute("""
+            SELECT home_ml, away_ml, over_under, captured_at,
+                   inning, home_score, away_score, home_wp
+            FROM live_odds_snapshots
+            WHERE game_id = ?
+            ORDER BY captured_at ASC
+        """, (game_id,)).fetchall()
+
+        for r in live_rows:
+            r = dict(r)
+            dk_prob = american_to_prob(r['home_ml'])
+            snapshots.append({
+                'captured_at': r['captured_at'],
+                'home_ml': r['home_ml'],
+                'away_ml': r['away_ml'],
+                'home_prob': round(dk_prob * 100, 2) if dk_prob is not None else None,
+                'over_under': r['over_under'],
+                'snapshot_type': 'live',
+                'inning': r['inning'],
+                'home_score': r['home_score'],
+                'away_score': r['away_score'],
+                'home_wp': round(r['home_wp'] * 100, 2) if r['home_wp'] is not None else None,
+                'dk_implied_prob': round(dk_prob * 100, 2) if dk_prob is not None else None,
+            })
+    except Exception:
+        pass  # Table might not exist yet
+
+    # Sort all snapshots chronologically
+    snapshots.sort(key=lambda s: s['captured_at'] or '')
     return snapshots
 
 

@@ -560,24 +560,44 @@
         </div>
     </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1/dist/chartjs-plugin-annotation.min.js"></script>
 <script>
 (function() {
     var snapshots = {{ line_history|tojson }};
     var homeColor = {{ home.primary_color|tojson }};
 
-    var labels = snapshots.map(function(s) {
+    var labels = snapshots.map(function(s, i) {
+        if (s.snapshot_type === 'live' && s.inning) {
+            return s.inning;
+        }
         var d = new Date(s.captured_at);
         return d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
     });
 
-    var probData = snapshots.map(function(s) { return s.home_prob; });
+    // DK implied probability (from moneyline)
+    var dkProbData = snapshots.map(function(s) { return s.dk_implied_prob || s.home_prob; });
+
+    // Our WP model (only available on live snapshots)
+    var wpData = snapshots.map(function(s) { return s.home_wp; });
+    var hasWP = wpData.some(function(v) { return v !== null; });
+
     var ouData = snapshots.map(function(s) { return s.over_under; });
     var hasOU = ouData.some(function(v) { return v !== null; });
 
-    // Mark opening/closing with special point styles
+    // Find "Game Start" index — first live snapshot
+    var gameStartIdx = -1;
+    for (var k = 0; k < snapshots.length; k++) {
+        if (snapshots[k].snapshot_type === 'live') {
+            gameStartIdx = k;
+            break;
+        }
+    }
+
+    // Point styles: opening triangle, closing diamond, live = circle
     var pointRadii = snapshots.map(function(s, i) {
         if (i === 0 || i === snapshots.length - 1) return 6;
         if (s.snapshot_type === 'opening' || s.snapshot_type === 'closing') return 6;
+        if (s.snapshot_type === 'live') return 3;
         return 2;
     });
     var pointStyles = snapshots.map(function(s, i) {
@@ -589,8 +609,8 @@
     });
 
     var datasets = [{
-        label: '{{ home.name }} Win Prob (%)',
-        data: probData,
+        label: 'DK Implied Prob (%)',
+        data: dkProbData,
         borderColor: homeColor,
         backgroundColor: homeColor + '22',
         fill: true,
@@ -601,12 +621,33 @@
         yAxisID: 'y'
     }];
 
+    // Add our WP model line if we have live data
+    if (hasWP) {
+        datasets.push({
+            label: 'Our WP Model (%)',
+            data: wpData,
+            borderColor: '#10b981',
+            borderWidth: 2,
+            borderDash: [6, 3],
+            fill: false,
+            tension: 0.3,
+            pointRadius: wpData.map(function(v) { return v !== null ? 4 : 0; }),
+            pointStyle: 'rectRot',
+            pointBackgroundColor: '#10b981',
+            yAxisID: 'y',
+            spanGaps: true,
+        });
+    }
+
+    // Combine all probability values for y-axis range
+    var allProbs = dkProbData.concat(wpData).filter(function(v) { return v !== null; });
+
     var scales = {
         y: {
             position: 'left',
-            title: { display: true, text: 'Home Win Prob (%)' },
-            min: Math.max(0, Math.min.apply(null, probData.filter(function(v){return v!==null;})) - 5),
-            max: Math.min(100, Math.max.apply(null, probData.filter(function(v){return v!==null;})) + 5),
+            title: { display: true, text: 'Win Probability (%)' },
+            min: allProbs.length ? Math.max(0, Math.min.apply(null, allProbs) - 5) : 0,
+            max: allProbs.length ? Math.min(100, Math.max.apply(null, allProbs) + 5) : 100,
         },
         x: {
             title: { display: false }
@@ -624,13 +665,34 @@
             pointRadius: 2,
             yAxisID: 'y1'
         });
-        var ouValid = ouData.filter(function(v){return v!==null;});
+        var ouValid = ouData.filter(function(v) { return v !== null; });
         scales.y1 = {
             position: 'right',
             title: { display: true, text: 'O/U' },
             min: Math.min.apply(null, ouValid) - 1,
             max: Math.max.apply(null, ouValid) + 1,
             grid: { drawOnChartArea: false }
+        };
+    }
+
+    // Annotations: vertical "Game Start" line
+    var annotations = {};
+    if (gameStartIdx > 0) {
+        annotations.gameStart = {
+            type: 'line',
+            xMin: gameStartIdx,
+            xMax: gameStartIdx,
+            borderColor: '#ef4444',
+            borderWidth: 2,
+            borderDash: [4, 4],
+            label: {
+                display: true,
+                content: 'First Pitch',
+                position: 'start',
+                backgroundColor: '#ef444422',
+                color: '#ef4444',
+                font: { size: 10, weight: 'bold' },
+            }
         };
     }
 
@@ -642,15 +704,23 @@
             maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: { display: hasOU },
+                legend: { display: hasWP || hasOU },
+                annotation: { annotations: annotations },
                 tooltip: {
                     callbacks: {
                         afterLabel: function(ctx) {
                             var s = snapshots[ctx.dataIndex];
+                            var lines = [];
                             if (ctx.datasetIndex === 0 && s.home_ml !== null) {
-                                return 'ML: ' + (s.home_ml > 0 ? '+' : '') + s.home_ml;
+                                lines.push('ML: ' + (s.home_ml > 0 ? '+' : '') + s.home_ml);
                             }
-                            return '';
+                            if (s.snapshot_type === 'live' && s.home_score !== null) {
+                                lines.push('Score: ' + s.away_score + '-' + s.home_score);
+                            }
+                            if (s.inning) {
+                                lines.push(s.inning);
+                            }
+                            return lines.join('\n');
                         }
                     }
                 }
