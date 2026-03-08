@@ -700,7 +700,8 @@ html[data-theme='dark'] .betting-loading-overlay {
                         </div>
                         <strong>{{ leg.pick }}</strong>
                         <small class="text-muted d-block">{{ leg.matchup }}</small>
-                        <small>{{ (leg.prob * 100)|round(0) }}% model prob {% if leg.edge > 0 %}| +{{ leg.edge }}% edge{% endif %}</small>
+                        <small>{{ ((leg.prob or leg.model_prob or 0) * 100)|round(0) }}% model prob {% if (leg.edge or 0) > 0 %}| +{{ leg.edge }}% edge{% endif %}</small>
+                        {% if leg.reasoning %}<small class="text-muted d-block mt-1"><i>{{ leg.reasoning }}</i></small>{% endif %}
                     </div>
                 </div>
             </div>
