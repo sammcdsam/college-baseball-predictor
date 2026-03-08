@@ -364,9 +364,12 @@ class ScheduleGateway:
         games; clears it for regulation (9-inning) games so the UI
         doesn't show a stale mid-game inning count."""
         c = self.db.cursor()
-        row = c.execute("SELECT home_team_id, away_team_id FROM games "
+        row = c.execute("SELECT home_team_id, away_team_id, status_locked FROM games "
                         "WHERE id = ?", (game_id,)).fetchone()
         if not row:
+            return False
+        if row.get('status_locked') or (isinstance(row, tuple) and len(row) > 2 and row[2]):
+            self._log("locked-skip", game_id, None, "finalize blocked by status_locked")
             return False
         winner = self._compute_winner(
             row["home_team_id"], row["away_team_id"], home_score, away_score)
@@ -415,6 +418,13 @@ class ScheduleGateway:
                           away_score: int, inning_text: str,
                           innings: int = None) -> bool:
         """Update in-progress game scores and inning text."""
+        # Lock guard
+        lock_row = self.db.execute(
+            "SELECT status_locked FROM games WHERE id = ?", (game_id,)
+        ).fetchone()
+        if lock_row and (lock_row[0] if isinstance(lock_row, tuple) else lock_row.get('status_locked')):
+            self._log("locked-skip", game_id, None, "live update blocked by status_locked")
+            return False
         # Doubleheader guard: never allow both gm1 and gm2 in-progress
         # simultaneously. If the counterpart is already live, skip this update.
         if game_id.endswith('_gm2'):

@@ -605,6 +605,15 @@ def write_change_to_db(change):
                 log.debug('Game %s not found in DB, skipping', game_id)
                 return
 
+        # Guard: respect manual locks — do not overwrite manually corrected games
+        locked_row = conn.execute(
+            'SELECT status_locked FROM games WHERE id = ?', (game_id,)
+        ).fetchone()
+        if locked_row and locked_row['status_locked']:
+            log.debug('Game %s is status_locked — skipping ESPN update', game_id)
+            conn.close()
+            return
+
         # Final DB-level date guard: don't mark future games as in-progress
         # Guard: never write 'final' without actual scores
         if db_status == 'final' and (home_score is None or away_score is None):

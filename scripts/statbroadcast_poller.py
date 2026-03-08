@@ -258,6 +258,17 @@ class StatBroadcastPoller:
         self._filetimes = {}  # sb_event_id -> last filetime
         self._poll_counts = {}  # sb_event_id -> poll cycle counter
         self._404_counts = {}  # sb_event_id -> consecutive 404 count
+
+    def _is_locked(self, game_id: str) -> bool:
+        """Check if a game has been manually locked (status_locked=1).
+        Locked games should not be modified by automated pollers."""
+        row = self.conn.execute(
+            "SELECT status_locked FROM games WHERE id = ?", (game_id,)
+        ).fetchone()
+        if row and (row[0] if isinstance(row, tuple) else row['status_locked']):
+            logger.debug("Game %s is status_locked — skipping update", game_id)
+            return True
+        return False
         self._retry_after = {}  # sb_event_id -> unix timestamp to retry after
         self._running = True
 
@@ -469,6 +480,12 @@ class StatBroadcastPoller:
 
         # DB writes (serialized)
         with self._db_lock:
+            # Respect manual locks — do not overwrite games that were manually corrected
+            if self._is_locked(game_id):
+                mark_completed(self.conn, sb_id)
+                logger.info("Game %s is locked — marking SB event %s completed", game_id, sb_id)
+                return False
+
             if is_final:
                 # Write final scores and mark game as final
                 self._finalize_game(game_id, sb_id, situation)

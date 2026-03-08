@@ -424,6 +424,13 @@ def update_scores(date_str=None):
             if db_status in ('final', 'in-progress') and (home_score is None or away_score is None):
                 continue
 
+            # Lock guard: don't overwrite manually corrected games
+            lock_row = conn.execute(
+                'SELECT status_locked FROM games WHERE id = ?', (game['id'],)
+            ).fetchone()
+            if lock_row and lock_row['status_locked']:
+                continue
+
             # DH guard: don't touch gm2 if gm1 isn't final yet
             gid = game['id']
             if gid.endswith('_gm2'):
