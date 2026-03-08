@@ -915,7 +915,7 @@ class StatBroadcastPoller:
                             game_id, db_status
                         )
 
-                # No ESPN match — if very stale + early innings + scoreless, assume canceled
+                # No ESPN match — check for staleness
                 if not new_status and not espn_status:
                     is_early = inning and ('1st' in str(inning) or '2nd' in str(inning))
                     is_scoreless = (home_score or 0) == 0 and (away_score or 0) == 0
@@ -933,6 +933,25 @@ class StatBroadcastPoller:
                             "Stale game %s: no ESPN data, %s 0-0, %.0f min stale — marking canceled",
                             game_id, inning, age_min
                         )
+
+                    # Overnight stale: if game has scores, is in late innings or 
+                    # hasn't updated in 3+ hours, it's almost certainly final.
+                    # Cross-check with WarrenNolan before finalizing.
+                    elif age_min > 180 and (home_score or 0) + (away_score or 0) > 0:
+                        logger.info(
+                            "Stale game %s: %.0f min since last update, score %s-%s %s — "
+                            "attempting to confirm final score",
+                            game_id, age_min, away_score, home_score, inning
+                        )
+                        confirmed = self._confirm_final_score(
+                            game_id, home_id, away_id, home_score, away_score
+                        )
+                        if confirmed:
+                            new_status = 'final'
+                            logger.info(
+                                "Confirmed final: %s → %s-%s",
+                                game_id, confirmed['away_score'], confirmed['home_score']
+                            )
 
                 if new_status:
                     self.conn.execute("""
@@ -959,6 +978,79 @@ class StatBroadcastPoller:
 
         except Exception as e:
             logger.error("Staleness check error: %s", e, exc_info=True)
+
+    def _confirm_final_score(self, game_id, home_id, away_id, current_home, current_away):
+        """Cross-check with WarrenNolan to confirm a stale game is actually final.
+
+        Returns dict with confirmed scores if the game is over, None otherwise.
+        """
+        import requests
+        import re
+
+        # Map team ID to WarrenNolan slug (capitalize, replace spaces with hyphens)
+        def wn_slug(team_id):
+            # Try home team name from DB first
+            row = self.conn.execute(
+                "SELECT name FROM teams WHERE id = ?", (team_id,)
+            ).fetchone()
+            if row:
+                name = row[0] if isinstance(row, tuple) else row['name']
+                return name.replace(' ', '-').replace("'", '').replace('&', '').replace('.', '')
+            return team_id.replace('-', ' ').title().replace(' ', '-')
+
+        slug = wn_slug(home_id)
+        try:
+            r = requests.get(
+                f'https://www.warrennolan.com/baseball/2026/schedule/{slug}',
+                timeout=8, headers={'User-Agent': 'Mozilla/5.0'}
+            )
+            if r.status_code != 200:
+                return None
+
+            # Parse game rows — find opponent
+            blocks = re.findall(
+                r'<td class="team-name">(.*?)</td>.*?'
+                r'<td class="rhe runs">(\d+)</td>.*?'
+                r'<td class="rhe">\d+</td>.*?'
+                r'<td class="rhe">\d+</td>.*?'
+                r'<td class="rhe runs">(\d+)</td>',
+                r.text, re.DOTALL
+            )
+
+            away_name_row = self.conn.execute(
+                "SELECT name FROM teams WHERE id = ?", (away_id,)
+            ).fetchone()
+            away_name = (away_name_row[0] if isinstance(away_name_row, tuple)
+                         else away_name_row['name']) if away_name_row else away_id
+
+            for name_html, opp_runs, team_runs in blocks:
+                opp_name = re.sub(r'<[^>]+>', '', name_html).strip().split('\n')[0].strip()
+                if (away_name.lower()[:8] in opp_name.lower() or
+                        opp_name.lower()[:8] in away_name.lower()):
+                    wn_away = int(opp_runs)
+                    wn_home = int(team_runs)
+                    # Only confirm if scores are non-zero (game actually happened)
+                    if wn_away + wn_home > 0:
+                        # Update the game with confirmed scores
+                        self.conn.execute("""
+                            UPDATE games SET status = 'final',
+                                home_score = ?, away_score = ?,
+                                inning_text = 'Final',
+                                updated_at = datetime('now')
+                            WHERE id = ?
+                        """, (wn_home, wn_away, game_id))
+                        # Determine winner
+                        winner = home_id if wn_home > wn_away else away_id
+                        self.conn.execute(
+                            "UPDATE games SET winner_id = ? WHERE id = ?",
+                            (winner, game_id)
+                        )
+                        self.conn.commit()
+                        return {'home_score': wn_home, 'away_score': wn_away}
+        except Exception as e:
+            logger.warning("WarrenNolan check failed for %s: %s", game_id, e)
+
+        return None
 
     def run(self):
         """Run the polling loop until stopped."""
