@@ -482,14 +482,43 @@ def grade_longshot_parlays():
                 pass
 
             winner = game['winner_id']
-            # Match pick to team — the pick name might not match team_id exactly
-            # Use the side stored in the leg, or match by game teams
-            pick_is_home = leg.get('side') == 'home'
-            if pick_is_home is None:
-                # Fallback: try matching pick name
-                pick_is_home = leg['pick'].lower().replace(' ', '-') in (game['home_team_id'] or '').lower()
+            # Match pick to team — resolve pick name to team_id
+            pick_name = leg['pick']
+            pick_slug = pick_name.lower().replace(' ', '-').replace("'", '').replace('.', '')
 
-            picked_team = game['home_team_id'] if pick_is_home else game['away_team_id']
+            # Try matching against both home and away team IDs and names
+            home_id = game['home_team_id'] or ''
+            away_id = game['away_team_id'] or ''
+
+            # Check if pick matches home team
+            home_name_row = c.execute(
+                "SELECT name FROM teams WHERE id = ?", (home_id,)
+            ).fetchone()
+            away_name_row = c.execute(
+                "SELECT name FROM teams WHERE id = ?", (away_id,)
+            ).fetchone()
+            home_name = (home_name_row['name'] if home_name_row else home_id).lower()
+            away_name = (away_name_row['name'] if away_name_row else away_id).lower()
+
+            if (pick_slug in home_id or pick_slug in home_name or
+                    home_id in pick_slug or home_name.startswith(pick_name.lower()[:6])):
+                picked_team = home_id
+            elif (pick_slug in away_id or pick_slug in away_name or
+                    away_id in pick_slug or away_name.startswith(pick_name.lower()[:6])):
+                picked_team = away_id
+            elif leg.get('side') == 'home':
+                picked_team = home_id
+            elif leg.get('side') == 'away':
+                picked_team = away_id
+            else:
+                # Last resort: use team resolver
+                try:
+                    from team_resolver import TeamResolver
+                    resolver = TeamResolver()
+                    resolved = resolver.resolve(pick_name)
+                    picked_team = resolved if resolved in (home_id, away_id) else away_id
+                except Exception:
+                    picked_team = away_id
             if winner == picked_team:
                 legs_won += 1
             else:
