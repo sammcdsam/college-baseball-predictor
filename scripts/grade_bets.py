@@ -164,6 +164,42 @@ def resolve_pick_team_id(conn, pick_name, game):
     return None
 
 
+def grade_risk_engine_bets(conn, dry_run=False):
+    """Grade risk_engine_bets."""
+    try:
+        rows = conn.execute(
+            "SELECT reb.id, reb.game_id, reb.pick_side, reb.pick_team_name, "
+            "reb.moneyline, reb.stake "
+            "FROM risk_engine_bets reb WHERE reb.won IS NULL"
+        ).fetchall()
+    except Exception:
+        return 0  # Table might not exist yet
+
+    graded = 0
+    for r in rows:
+        game = find_game(conn, r['game_id'])
+        if not game or game['status'] != 'final' or not game['winner_id']:
+            continue
+
+        pick_side = r['pick_side']
+        picked_id = game['home_team_id'] if pick_side == 'home' else game['away_team_id']
+        won = 1 if game['winner_id'] == picked_id else 0
+        if r['moneyline'] is None:
+            continue  # Totals bets don't have ML — skip for now
+        profit = ml_profit(r['stake'] or 100, r['moneyline'], won)
+
+        print(f"  Risk #{r['id']}: {r['pick_team_name']} → {'WON' if won else 'LOST'} (${profit:+.2f})")
+
+        if not dry_run:
+            conn.execute(
+                "UPDATE risk_engine_bets SET won = ?, profit = ? WHERE id = ?",
+                (won, round(profit, 2), r['id'])
+            )
+        graded += 1
+
+    return graded
+
+
 def grade_parlays(conn, dry_run=False):
     """Grade tracked_parlays."""
     rows = conn.execute(
@@ -266,13 +302,16 @@ def main():
     print("\nGrading parlays...")
     par = grade_parlays(conn, dry_run)
 
+    print("\nGrading risk engine bets...")
+    risk = grade_risk_engine_bets(conn, dry_run)
+
     if not dry_run:
         conn.commit()
 
     conn.close()
 
-    total = ev + cons + par
-    print(f"\nDone: {total} bets graded ({ev} EV, {cons} consensus, {par} parlays)")
+    total = ev + cons + par + risk
+    print(f"\nDone: {total} bets graded ({ev} EV, {cons} consensus, {par} parlays, {risk} risk engine)")
 
 
 if __name__ == '__main__':

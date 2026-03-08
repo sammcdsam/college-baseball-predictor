@@ -56,7 +56,7 @@ def build_betting_page_context(conference=''):
     conferences = get_all_conferences()
     games = get_betting_games()
 
-    # Risk engine preview — read from locked-in tracked_bets (snapshotted at morning pipeline)
+    # Risk engine preview — read from locked-in risk_engine_bets (snapshotted in morning pipeline)
     risk_preview = None
     risk_engine = {
         'mode': getattr(cfg, 'BET_RISK_ENGINE_MODE', 'fixed'),
@@ -68,29 +68,29 @@ def build_betting_page_context(conference=''):
     try:
         _risk_conn = get_connection()
         _risk_rows = _risk_conn.execute(
-            "SELECT tb.*, g.status, g.winner_id "
-            "FROM tracked_bets tb "
-            "LEFT JOIN games g ON tb.game_id = g.id "
-            "WHERE tb.date = ? ORDER BY tb.edge DESC",
+            "SELECT reb.*, g.status, g.winner_id "
+            "FROM risk_engine_bets reb "
+            "LEFT JOIN games g ON reb.game_id = g.id "
+            "WHERE reb.date = ? ORDER BY reb.edge DESC",
             (today_str,)
         ).fetchall()
         _risk_bets = []
         for r in _risk_rows:
             r = dict(r)
             _risk_bets.append({
-                'type': 'ML',
+                'type': r.get('type', 'ML'),
                 'game_id': r['game_id'],
                 'date': r['date'],
                 'pick_team': r.get('pick_team_name', ''),
                 'opponent': r.get('opponent_name', ''),
-                'pick_side': 'home' if r.get('is_home') else 'away',
+                'pick_side': r.get('pick_side', ''),
                 'moneyline': r.get('moneyline'),
                 'model_prob': r.get('model_prob'),
                 'edge': r.get('edge', 0),
-                'stake': r.get('suggested_stake') or r.get('bet_amount') or 100,
+                'stake': r.get('stake', 100),
                 'risk_mode': r.get('risk_mode', 'fixed'),
                 'risk_score': r.get('risk_score'),
-                'kelly_fraction': r.get('kelly_fraction_used'),
+                'kelly_fraction': r.get('kelly_fraction'),
                 'won': r.get('won'),
                 'profit': r.get('profit'),
                 'status': r.get('status'),

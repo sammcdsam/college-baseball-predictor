@@ -25,6 +25,9 @@ python3 scripts/coverage_check.py --fix --quiet >> "$LOG" 2>&1 || true
 echo "--- Bet selection ---" >> "$LOG"
 python3 scripts/bet_selection_v2.py record >> "$LOG" 2>&1
 
+echo "--- Risk engine snapshot ---" >> "$LOG"
+python3 scripts/record_risk_engine.py >> "$LOG" 2>&1
+
 echo "--- Parlay upgrade check ---" >> "$LOG"
 python3 -m scripts.betting.upgrade_parlay >> "$LOG" 2>&1 || true
 
