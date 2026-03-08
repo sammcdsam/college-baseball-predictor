@@ -29,6 +29,7 @@ ML_MIN_MODEL_PROB = 0.55
 
 TOTALS_EDGE_THRESHOLD = 3.0
 TOTALS_MIN_CONFIDENCE = 0.6
+TOTALS_ENABLED = False  # Totals models not reliable enough for betting yet
 
 SPREADS_ENABLED = False
 
@@ -202,6 +203,10 @@ def analyze_games(date_str: Optional[str] = None) -> dict:
     for game in data.get('totals', []):
         edge = game['edge']
         rejection_reasons = []
+
+        # Totals models not reliable enough for betting
+        if not TOTALS_ENABLED:
+            rejection_reasons.append("TOTALS DISABLED — models not calibrated for betting")
 
         # OVER predictions are 47% accurate — worse than coin flip. Disable.
         if game.get('pick') == 'OVER':
