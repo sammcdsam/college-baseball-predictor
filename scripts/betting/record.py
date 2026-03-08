@@ -46,10 +46,25 @@ def build_parlay(results: dict) -> dict:
         ml_candidates.append({**b, 'parlay_score': parlay_score, 'parlay_prob': prob})
     ml_candidates.sort(key=lambda x: x['parlay_score'], reverse=True)
 
+    # Prefer lighter lines (> -300) when possible — better parlay value.
+    # Try building with light candidates first; fall back to all if not enough.
+    LIGHT_ML_THRESHOLD = -300
+    light_candidates = [c for c in ml_candidates if c['moneyline'] >= LIGHT_ML_THRESHOLD]
+
+    # Use light candidates if we can fill 4 legs (or 3 minimum), otherwise use all
+    if len(light_candidates) >= PARLAY_LEGS:
+        selected_candidates = light_candidates
+    elif len(light_candidates) >= 3:
+        # Have 3 light legs — fill remaining from heavier favorites by score
+        heavy = [c for c in ml_candidates if c['moneyline'] < LIGHT_ML_THRESHOLD]
+        selected_candidates = light_candidates + heavy
+    else:
+        selected_candidates = ml_candidates
+
     # ML-only legs, no totals (totals legs were unreliable in parlays)
     legs = []
     used_ids = set()
-    for c in ml_candidates:
+    for c in selected_candidates:
         if len(legs) >= PARLAY_LEGS:
             break
         if c['game_id'] not in used_ids:
