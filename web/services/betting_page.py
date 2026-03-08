@@ -9,7 +9,7 @@ sys.path.insert(0, str(base_dir))
 sys.path.insert(0, str(base_dir / "scripts"))
 
 from config import model_config as cfg
-from bet_selection_v2 import analyze_games
+# analyze_games no longer called live — risk engine reads from tracked_bets
 
 from web.helpers import get_all_conferences, get_betting_games
 from web.bet_quality import (
@@ -56,7 +56,7 @@ def build_betting_page_context(conference=''):
     conferences = get_all_conferences()
     games = get_betting_games()
 
-    # Experimental risk engine preview (opt-in via ?view=experimental)
+    # Risk engine preview — read from locked-in tracked_bets (snapshotted at morning pipeline)
     risk_preview = None
     risk_engine = {
         'mode': getattr(cfg, 'BET_RISK_ENGINE_MODE', 'fixed'),
@@ -66,13 +66,42 @@ def build_betting_page_context(conference=''):
         'max_stake': getattr(cfg, 'BET_RISK_MAX_STAKE', 250.0),
     }
     try:
-        preview = analyze_games()
+        _risk_conn = get_connection()
+        _risk_rows = _risk_conn.execute(
+            "SELECT tb.*, g.status, g.winner_id "
+            "FROM tracked_bets tb "
+            "LEFT JOIN games g ON tb.game_id = g.id "
+            "WHERE tb.date = ? ORDER BY tb.edge DESC",
+            (today_str,)
+        ).fetchall()
+        _risk_bets = []
+        for r in _risk_rows:
+            r = dict(r)
+            _risk_bets.append({
+                'type': 'ML',
+                'game_id': r['game_id'],
+                'date': r['date'],
+                'pick_team': r.get('pick_team_name', ''),
+                'opponent': r.get('opponent_name', ''),
+                'pick_side': 'home' if r.get('is_home') else 'away',
+                'moneyline': r.get('moneyline'),
+                'model_prob': r.get('model_prob'),
+                'edge': r.get('edge', 0),
+                'stake': r.get('suggested_stake') or r.get('bet_amount') or 100,
+                'risk_mode': r.get('risk_mode', 'fixed'),
+                'risk_score': r.get('risk_score'),
+                'kelly_fraction': r.get('kelly_fraction_used'),
+                'won': r.get('won'),
+                'profit': r.get('profit'),
+                'status': r.get('status'),
+            })
         risk_preview = {
-            'date': preview.get('date'),
-            'bets': preview.get('bets', [])[:8],
-            'rejections': len(preview.get('rejections', [])),
-            'error': preview.get('error'),
+            'date': today_str,
+            'bets': _risk_bets[:8],
+            'rejections': 0,
+            'error': None,
         }
+        _risk_conn.close()
     except Exception as e:
         risk_preview = {'date': None, 'bets': [], 'rejections': 0, 'error': str(e)}
 
