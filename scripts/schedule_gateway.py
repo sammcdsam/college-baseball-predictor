@@ -368,7 +368,11 @@ class ScheduleGateway:
                         "WHERE id = ?", (game_id,)).fetchone()
         if not row:
             return False
-        if row.get('status_locked') or (isinstance(row, tuple) and len(row) > 2 and row[2]):
+        try:
+            locked = row['status_locked']
+        except (IndexError, KeyError):
+            locked = False
+        if locked:
             self._log("locked-skip", game_id, None, "finalize blocked by status_locked")
             return False
         winner = self._compute_winner(
@@ -422,7 +426,7 @@ class ScheduleGateway:
         lock_row = self.db.execute(
             "SELECT status_locked FROM games WHERE id = ?", (game_id,)
         ).fetchone()
-        if lock_row and (lock_row[0] if isinstance(lock_row, tuple) else lock_row.get('status_locked')):
+        if lock_row and lock_row['status_locked']:
             self._log("locked-skip", game_id, None, "live update blocked by status_locked")
             return False
         # Doubleheader guard: never allow both gm1 and gm2 in-progress
