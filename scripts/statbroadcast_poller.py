@@ -258,6 +258,8 @@ class StatBroadcastPoller:
         self._filetimes = {}  # sb_event_id -> last filetime
         self._poll_counts = {}  # sb_event_id -> poll cycle counter
         self._404_counts = {}  # sb_event_id -> consecutive 404 count
+        self._retry_after = {}  # sb_event_id -> unix timestamp to retry after
+        self._running = True
 
     def _is_locked(self, game_id: str) -> bool:
         """Check if a game has been manually locked (status_locked=1).
@@ -269,8 +271,6 @@ class StatBroadcastPoller:
             logger.debug("Game %s is status_locked — skipping update", game_id)
             return True
         return False
-        self._retry_after = {}  # sb_event_id -> unix timestamp to retry after
-        self._running = True
 
     def stop(self):
         """Signal the poller to stop."""
