@@ -108,6 +108,39 @@ def validate_sb_teams(situation, event, conn):
     # If both teams resolved, BOTH must be in the expected set
     if sb_home_id and sb_visitor_id:
         if resolved <= expected:
+            # Teams match — but check if home/away is swapped.
+            # SB is ground truth for who is actually home/away.
+            if sb_home_id != expected_home and sb_home_id == expected_away:
+                logger.warning(
+                    "SB HOME/AWAY SWAP detected for game %s (SB event %s): "
+                    "SB says home=%s (%s), visitor=%s (%s) but DB has home=%s, away=%s — FIXING",
+                    game_id, event.get('sb_event_id'),
+                    sb_home, sb_home_id, sb_visitor, sb_visitor_id,
+                    expected_home, expected_away,
+                )
+                # Swap team IDs
+                conn.execute(
+                    "UPDATE games SET home_team_id = ?, away_team_id = ? WHERE id = ?",
+                    (sb_home_id, sb_visitor_id, game_id),
+                )
+                # Also swap any existing scores/hits/errors so they stay with the right team
+                conn.execute("""
+                    UPDATE games
+                    SET home_score = away_score, away_score = home_score,
+                        home_hits = away_hits, away_hits = home_hits,
+                        home_errors = away_errors, away_errors = home_errors
+                    WHERE id = ?
+                """, (game_id,))
+                conn.execute(
+                    "UPDATE statbroadcast_events SET home_team_id = ?, visitor_team_id = ? "
+                    "WHERE sb_event_id = ?",
+                    (sb_home_id, sb_visitor_id, event.get('sb_event_id')),
+                )
+                conn.commit()
+                logger.info(
+                    "Fixed home/away for game %s: home=%s, away=%s (scores/hits/errors swapped too)",
+                    game_id, sb_home_id, sb_visitor_id,
+                )
             return True
         # One or both resolved teams are NOT in our expected matchup — reject
         logger.warning(
