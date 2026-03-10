@@ -103,29 +103,52 @@ def get_team_rotation(conn, team_id, lookback_days=21):
     
     series_list = group_into_series(games)
     
-    # Track starters by series position
-    weekend_starters = defaultdict(list)  # position -> [names]
+    # Track starters by series position with recency weighting.
+    # The most recent series gets 3x weight, second-most-recent 2x, rest 1x.
+    # This ensures mid-season rotation changes are picked up quickly.
+    weekend_starters = defaultdict(list)  # position -> [(name, weight)]
     midweek_starters = []
+    
+    num_weekend = sum(1 for s in series_list if is_weekend_series(s))
+    weekend_idx = 0
     
     for series in series_list:
         if is_weekend_series(series):
+            # Recency weight: most recent weekend series = 3x, second = 2x, rest = 1x
+            recency_rank = num_weekend - weekend_idx  # countdown from num to 1
+            if recency_rank == 1:
+                weight = 3  # most recent
+            elif recency_rank == 2:
+                weight = 2  # second most recent
+            else:
+                weight = 1
+            weekend_idx += 1
+            
             for game in series:
                 pos = game['series_position']
-                weekend_starters[pos].append(game['starting_pitcher'])
+                weekend_starters[pos].append((game['starting_pitcher'], weight))
         else:
             for game in series:
                 midweek_starters.append(game['starting_pitcher'])
     
-    # Build rotation with confidence
+    # Build rotation with recency-weighted confidence
     rotation = {'weekend': {}, 'midweek': []}
     
-    for pos, names in weekend_starters.items():
+    for pos, name_weights in weekend_starters.items():
         counts = defaultdict(int)
-        for n in names:
-            counts[n] += 1
+        for name, weight in name_weights:
+            counts[name] += weight
         best = max(counts.items(), key=lambda x: x[1])
-        name, count = best
-        conf = 'high' if count >= 2 else 'medium'
+        name, weighted_count = best
+        # High confidence if most recent series matches, or 2+ starts
+        total_starts = sum(1 for n, _ in name_weights if n == name)
+        most_recent = name_weights[-1][0] if name_weights else None
+        if most_recent == name:
+            conf = 'high'  # most recent series confirms this slot
+        elif total_starts >= 2:
+            conf = 'medium'
+        else:
+            conf = 'low'
         rotation['weekend'][pos] = (name, conf)
     
     if midweek_starters:
