@@ -118,16 +118,37 @@ def build_context(date_str=None):
             'rot_k9': row['rotation_k_per_9'], 'pen_era': row['bullpen_era'], 'pen_whip': row['bullpen_whip']
         }
 
-    # Get pitching matchups (starters)
+    # Get pitching matchups (starters) with individual pitcher stats
     starters = {}
     for row in db.execute("""
-        SELECT game_id, home_starter_name, away_starter_name
-        FROM pitching_matchups WHERE game_id IN (
+        SELECT pm.game_id, pm.home_starter_name, pm.away_starter_name,
+               pm.home_starter_id, pm.away_starter_id,
+               hp.era as h_era, hp.whip as h_whip, hp.k_per_9 as h_k9,
+               hp.innings_pitched as h_ip, hp.wins as h_w, hp.losses as h_l,
+               hp.fip as h_fip, hp.team_id as h_pitcher_team,
+               ap.era as a_era, ap.whip as a_whip, ap.k_per_9 as a_k9,
+               ap.innings_pitched as a_ip, ap.wins as a_w, ap.losses as a_l,
+               ap.fip as a_fip, ap.team_id as a_pitcher_team
+        FROM pitching_matchups pm
+        LEFT JOIN player_stats hp ON pm.home_starter_id = hp.id
+        LEFT JOIN player_stats ap ON pm.away_starter_id = ap.id
+        WHERE pm.game_id IN (
             SELECT id FROM games WHERE date = ? AND status = 'scheduled'
         )
     """, (date_str,)):
         starters[row['game_id']] = {
-            'home': row['home_starter_name'], 'away': row['away_starter_name']
+            'home_name': row['home_starter_name'],
+            'away_name': row['away_starter_name'],
+            'home_pitcher_team': row['h_pitcher_team'],
+            'away_pitcher_team': row['a_pitcher_team'],
+            'home_stats': {
+                'era': row['h_era'], 'whip': row['h_whip'], 'k9': row['h_k9'],
+                'ip': row['h_ip'], 'w': row['h_w'], 'l': row['h_l'], 'fip': row['h_fip']
+            } if row['home_starter_name'] else None,
+            'away_stats': {
+                'era': row['a_era'], 'whip': row['a_whip'], 'k9': row['a_k9'],
+                'ip': row['a_ip'], 'w': row['a_w'], 'l': row['a_l'], 'fip': row['a_fip']
+            } if row['away_starter_name'] else None,
         }
 
     # Get weather
@@ -236,10 +257,36 @@ def format_as_text(data):
         # Recent form
         lines.append(f"   Recent Form: {g['home']} [{g['home_form']}] | {g['away']} [{g['away_form']}]")
 
-        # Starters
+        # Starters (with individual stats)
         if g.get('starters'):
             s = g['starters']
-            lines.append(f"   Starters: {s.get('away', '?')} vs {s.get('home', '?')}")
+            away_sp = s.get('away_name') or 'Unknown'
+            home_sp = s.get('home_name') or 'Unknown'
+            lines.append(f"   Probable Starters:")
+            lines.append(f"     {g['away']} SP: {away_sp}")
+            if s.get('away_stats') and s['away_stats'].get('era') is not None:
+                ast = s['away_stats']
+                parts = []
+                if ast.get('era') is not None: parts.append(f"ERA {ast['era']:.2f}")
+                if ast.get('whip') is not None: parts.append(f"WHIP {ast['whip']:.2f}")
+                if ast.get('k9') is not None: parts.append(f"K/9 {ast['k9']:.1f}")
+                if ast.get('ip') is not None: parts.append(f"IP {ast['ip']:.1f}")
+                if ast.get('w') is not None and ast.get('l') is not None: parts.append(f"{ast['w']}-{ast['l']}")
+                if ast.get('fip') is not None and ast['fip']: parts.append(f"FIP {ast['fip']:.2f}")
+                if parts:
+                    lines.append(f"       Stats: {' | '.join(parts)}")
+            lines.append(f"     {g['home']} SP: {home_sp}")
+            if s.get('home_stats') and s['home_stats'].get('era') is not None:
+                hst = s['home_stats']
+                parts = []
+                if hst.get('era') is not None: parts.append(f"ERA {hst['era']:.2f}")
+                if hst.get('whip') is not None: parts.append(f"WHIP {hst['whip']:.2f}")
+                if hst.get('k9') is not None: parts.append(f"K/9 {hst['k9']:.1f}")
+                if hst.get('ip') is not None: parts.append(f"IP {hst['ip']:.1f}")
+                if hst.get('w') is not None and hst.get('l') is not None: parts.append(f"{hst['w']}-{hst['l']}")
+                if hst.get('fip') is not None and hst['fip']: parts.append(f"FIP {hst['fip']:.2f}")
+                if parts:
+                    lines.append(f"       Stats: {' | '.join(parts)}")
 
         # Batting
         for side, key in [('home', g['home']), ('away', g['away'])]:
