@@ -77,7 +77,7 @@ def is_weekend_series(series):
     return False
 
 
-def get_team_rotation(conn, team_id, lookback_days=21):
+def get_team_rotation(conn, team_id, lookback_days=10):
     """
     Analyze a team's rotation based on series position.
     
