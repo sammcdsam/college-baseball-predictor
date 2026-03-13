@@ -255,11 +255,18 @@
                         {% for p in pending_longshots %}
                         <small class="d-block text-muted">{{ p.date }}: +{{ p.american_odds }} ({{ (p.model_prob * 100)|round(1) }}%)</small>
                         {% endfor %}
-                        {% for p in longshot_bets|reverse %}
+                        {# Show only the 4 most recent graded parlays in detail #}
+                        {% set recent_longshots = longshot_bets|reverse|list %}
+                        {% for p in recent_longshots[:4] %}
                         <small class="d-block {% if p.won %}text-success{% else %}text-danger{% endif %}">
                             {{ p.date }}: +{{ p.american_odds }} {% if p.won %}✅ +${{ (p.payout - p.bet_amount)|round(2) }}{% else %}❌ {{ p.legs_won }}/{{ p.num_legs }}{% endif %}
                         </small>
                         {% endfor %}
+                        {% if recent_longshots|length > 4 %}
+                        {% set older = recent_longshots[4:] %}
+                        {% set older_wins = older|selectattr('won')|list|length %}
+                        <small class="d-block text-muted mt-1">+ {{ older|length }} older: {{ older_wins }}/{{ older|length }}</small>
+                        {% endif %}
                     </div>
                 </div>
             </div>
