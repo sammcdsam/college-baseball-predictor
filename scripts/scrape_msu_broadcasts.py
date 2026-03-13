@@ -31,8 +31,8 @@ MSU_ESPN_ID = '150'
 ESPN_SCHEDULE_URL = f'https://site.api.espn.com/apis/site/v2/sports/baseball/college-baseball/teams/{MSU_ESPN_ID}/schedule'
 
 # Varsity Sports Network — MSU's radio home
-VARSITY_NETWORK_URL = 'https://thevarsitynetwork.com/audioPlayer/msstate'
-VARSITY_NETWORK_APP = 'https://thevarsitynetwork.com/feed'
+# oas-1176 is MSU's source feed page which shows all live/recent streams
+VARSITY_NETWORK_URL = 'https://thevarsitynetwork.com/feed/source/oas-1176'
 
 
 def get_connection():
@@ -136,21 +136,9 @@ def scrape_broadcasts(conn, target_date=None, all_games=False):
         broadcasts = comp.get('broadcasts', [])
         links = event.get('links', [])
 
-        # Extract WatchESPN link
-        watch_url = None
-        for link in links:
-            href = link.get('href', '')
-            if 'watchespn' in href.lower() and not href.startswith('watchespn://'):
-                watch_url = href
-                break
-        if not watch_url:
-            # Fall back to ESPN game page
-            for link in links:
-                text = link.get('text', '')
-                href = link.get('href', '')
-                if text == 'Now' and 'espn.com' in href:
-                    watch_url = href
-                    break
+        # Build direct ESPN Watch URL from game ID
+        # https://www.espn.com/watch/?gameId=<id> goes straight to the stream
+        watch_url = f'https://www.espn.com/watch/?gameId={espn_game_id}' if espn_game_id else None
 
         # Store TV/Streaming broadcasts from ESPN
         for bc in broadcasts:
