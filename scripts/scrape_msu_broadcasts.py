@@ -33,8 +33,8 @@ HAILSTATE_SCHEDULE_URL = 'https://hailstate.com/sports/baseball/schedule'
 ESPN_WATCH_RE = re.compile(r'espn\.com/watch/player/_/eventCalendarId/\d+\?gameId=(\d+)')
 # SB audio: statbroadcast.com/broadcast/?id=<sb_id>&vislive=msst
 SB_AUDIO_RE = re.compile(r'statbroadcast\.com/broadcast/\?id=(\d+)&amp;vislive=msst')
-# SB broadcast (non-audio): statbroadcast.com/broadcast/?id=<sb_id> (no vislive)
-SB_BROADCAST_RE = re.compile(r'statbroadcast\.com/broadcast/\?id=(\d+)(?!&amp;vislive)')
+# Showcase (radio/audio): /showcase?Live=<live_id>
+SHOWCASE_RE = re.compile(r'/showcase\?Live=(\d+)')
 
 
 def get_connection():
@@ -73,7 +73,7 @@ def parse_broadcast_links(html):
 
     Returns:
         espn_links: dict of espn_game_id -> direct watch URL
-        audio_links: dict of sb_event_id -> VSN audio URL
+        audio_links: dict of sb_event_id -> hailstate.com/showcase?Live=XXXX URL
     """
     espn_links = {}
     for m in ESPN_WATCH_RE.finditer(html):
@@ -81,11 +81,22 @@ def parse_broadcast_links(html):
         full_url = f'https://www.espn.com/watch/player/_/eventCalendarId/{game_id}?gameId={game_id}'
         espn_links[game_id] = full_url
 
-    audio_links = {}
-    for m in SB_AUDIO_RE.finditer(html):
-        sb_id = m.group(1)
-        full_url = f'https://stats.statbroadcast.com/broadcast/?id={sb_id}&vislive=msst'
-        audio_links[sb_id] = full_url
+    # Match SB event IDs to showcase Live IDs by proximity in the HTML
+    # Each game entry has both a SB broadcast link and a /showcase?Live= link nearby
+    sb_positions = [(m.start(), m.group(1)) for m in SB_AUDIO_RE.finditer(html)]
+    live_positions = [(m.start(), m.group(1)) for m in SHOWCASE_RE.finditer(html)]
+
+    audio_links = {}  # sb_event_id -> showcase URL
+    for sb_pos, sb_id in sb_positions:
+        closest_live = None
+        closest_dist = float('inf')
+        for live_pos, live_id in live_positions:
+            dist = abs(sb_pos - live_pos)
+            if dist < closest_dist:
+                closest_dist = dist
+                closest_live = live_id
+        if closest_live and closest_dist < 3000:
+            audio_links[sb_id] = f'https://hailstate.com/showcase?Live={closest_live}'
 
     return espn_links, audio_links
 
