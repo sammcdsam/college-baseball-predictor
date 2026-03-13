@@ -75,9 +75,33 @@ def team_detail(team_id):
 
     percentiles = get_team_percentiles(team_id)
 
+    # Broadcast info for upcoming games
+    broadcasts_by_game = {}
+    try:
+        from web.db import get_connection
+        conn_bc = get_connection()
+        bc_rows = conn_bc.execute("""
+            SELECT gb.game_id, gb.broadcast_type, gb.provider, gb.url
+            FROM game_broadcasts gb
+            JOIN games g ON gb.game_id = g.id
+            WHERE gb.team_id = ?
+            AND g.date >= date('now', '-5 hours')
+            ORDER BY g.date, CASE gb.broadcast_type
+                WHEN 'tv' THEN 1 WHEN 'streaming' THEN 2 WHEN 'radio' THEN 3 ELSE 4 END
+        """, (team_id,)).fetchall()
+        for r in bc_rows:
+            gid = r['game_id']
+            if gid not in broadcasts_by_game:
+                broadcasts_by_game[gid] = []
+            broadcasts_by_game[gid].append(dict(r))
+        conn_bc.close()
+    except Exception:
+        pass
+
     return render_template('team_detail.html',
                           team=team,
                           batters=batters,
                           pitchers=pitchers,
                           recent_form=recent_form,
-                          percentiles=percentiles)
+                          percentiles=percentiles,
+                          broadcasts_by_game=broadcasts_by_game)

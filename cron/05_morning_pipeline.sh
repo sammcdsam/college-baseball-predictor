@@ -10,6 +10,16 @@ echo "=== Morning Pipeline $(date) ===" >> "$LOG"
 echo "--- Weather ---" >> "$LOG"
 python3 -u scripts/weather.py fetch --upcoming >> "$LOG" 2>&1
 
+echo "--- MSU Broadcasts ---" >> "$LOG"
+# Only scrape if MSU has a game today
+MSU_GAMES=$(sqlite3 data/baseball.db "SELECT COUNT(*) FROM games WHERE date = date('now','-5 hours') AND (home_team_id='mississippi-state' OR away_team_id='mississippi-state');")
+if [ "$MSU_GAMES" -gt 0 ]; then
+    python3 scripts/scrape_msu_broadcasts.py >> "$LOG" 2>&1 || true
+    echo "  MSU has $MSU_GAMES game(s) today — broadcasts refreshed" >> "$LOG"
+else
+    echo "  No MSU games today — skipping" >> "$LOG"
+fi
+
 echo "--- Infer Starters ---" >> "$LOG"
 python3 -u scripts/infer_starters.py >> "$LOG" 2>&1
 
