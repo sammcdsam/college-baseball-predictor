@@ -78,7 +78,7 @@ def team_detail(team_id):
     # Broadcast info for upcoming games
     broadcasts_by_game = {}
     try:
-        from web.db import get_connection
+        from database import get_connection
         conn_bc = get_connection()
         bc_rows = conn_bc.execute("""
             SELECT gb.game_id, gb.broadcast_type, gb.provider, gb.url

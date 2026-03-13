@@ -56,7 +56,7 @@ def dashboard():
     # Broadcast info for featured team's current/next game
     featured_broadcasts = []
     try:
-        from web.db import get_connection
+        from database import get_connection
         conn_bc = get_connection()
         today_str = datetime.now().strftime('%Y-%m-%d')
         bc_rows = conn_bc.execute("""
