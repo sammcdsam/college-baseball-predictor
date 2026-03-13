@@ -191,6 +191,15 @@
                     </div>
                 </div>
                 {% endif %}
+                {% if featured_broadcasts %}
+                <div class="d-flex justify-content-center gap-2 mt-2 flex-wrap">
+                    {% for bc in featured_broadcasts %}
+                    {% if bc.url %}
+                    <a href="{{ bc.url }}" target="_blank" rel="noopener" class="badge text-decoration-none {% if bc.broadcast_type == 'tv' %}bg-primary{% elif bc.broadcast_type == 'streaming' %}bg-info text-dark{% else %}bg-secondary{% endif %}" style="font-size:0.7rem;">{% if bc.broadcast_type == 'tv' %}📺{% elif bc.broadcast_type == 'streaming' %}💻{% else %}📻{% endif %} {{ bc.provider }}</a>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
             </div>
             <div class="card-footer text-center">
                 <a href="/team/{{ featured.team_id }}" class="btn btn-sm btn-maroon">Full Team Page</a>

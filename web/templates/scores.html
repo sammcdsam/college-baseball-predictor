@@ -304,15 +304,6 @@
                                 {% endif %}
                             </div>
                         </div>
-                        {% if game.broadcasts %}
-                        <div class="d-flex gap-1 mt-1 flex-wrap">
-                            {% for bc in game.broadcasts %}
-                            {% if bc.url %}
-                            <a href="{{ bc.url }}" target="_blank" rel="noopener" class="badge text-decoration-none {% if bc.broadcast_type == 'tv' %}bg-primary{% elif bc.broadcast_type == 'streaming' %}bg-info text-dark{% else %}bg-secondary{% endif %}" style="font-size:0.6rem;" onclick="event.stopPropagation();" data-no-card-nav="1">{% if bc.broadcast_type == 'tv' %}📺{% elif bc.broadcast_type == 'streaming' %}💻{% else %}📻{% endif %} {{ bc.provider }}</a>
-                            {% endif %}
-                            {% endfor %}
-                        </div>
-                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -414,15 +405,6 @@
                                 {% endif %}
                             </div>
                         </div>
-                        {% if game.broadcasts %}
-                        <div class="d-flex gap-1 mt-1 flex-wrap">
-                            {% for bc in game.broadcasts %}
-                            {% if bc.url %}
-                            <a href="{{ bc.url }}" target="_blank" rel="noopener" class="badge text-decoration-none {% if bc.broadcast_type == 'tv' %}bg-primary{% elif bc.broadcast_type == 'streaming' %}bg-info text-dark{% else %}bg-secondary{% endif %}" style="font-size:0.6rem;" onclick="event.stopPropagation();" data-no-card-nav="1">{% if bc.broadcast_type == 'tv' %}📺{% elif bc.broadcast_type == 'streaming' %}💻{% else %}📻{% endif %} {{ bc.provider }}</a>
-                            {% endif %}
-                            {% endfor %}
-                        </div>
-                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -571,15 +553,6 @@
                                         </div>
                                     </div>
                                 </details>
-                                {% if game.broadcasts %}
-                                <div class="d-flex gap-1 mt-2 pt-2 border-top flex-wrap">
-                                    {% for bc in game.broadcasts %}
-                                    {% if bc.url %}
-                                    <a href="{{ bc.url }}" target="_blank" rel="noopener" class="badge text-decoration-none {% if bc.broadcast_type == 'tv' %}bg-primary{% elif bc.broadcast_type == 'streaming' %}bg-info text-dark{% else %}bg-secondary{% endif %}" style="font-size:0.6rem;" onclick="event.stopPropagation();" data-no-card-nav="1">{% if bc.broadcast_type == 'tv' %}📺{% elif bc.broadcast_type == 'streaming' %}💻{% else %}📻{% endif %} {{ bc.provider }}</a>
-                                    {% endif %}
-                                    {% endfor %}
-                                </div>
-                                {% endif %}
                             </div>
                         </div>
                         {% endfor %}

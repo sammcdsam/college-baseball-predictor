@@ -333,27 +333,6 @@ def scores():
                 totals_total += 1
     totals_accuracy_pct = round(totals_correct / totals_total * 100, 1) if totals_total > 0 else None
 
-    # Broadcast info for game cards (MSU only for now)
-    try:
-        bc_rows = c.execute("""
-            SELECT game_id, broadcast_type, provider, url
-            FROM game_broadcasts
-            WHERE game_id IN (SELECT id FROM games WHERE date = ?)
-            ORDER BY game_id, CASE broadcast_type
-                WHEN 'tv' THEN 1 WHEN 'streaming' THEN 2 WHEN 'radio' THEN 3 ELSE 4 END
-        """, (date_str,)).fetchall()
-        bc_map = {}
-        for r in bc_rows:
-            gid = r['game_id']
-            if gid not in bc_map:
-                bc_map[gid] = []
-            bc_map[gid].append(dict(r))
-        for game_list in [in_progress_games, scheduled_games, completed_games]:
-            for game in game_list:
-                game['broadcasts'] = bc_map.get(game.get('id'), [])
-    except Exception:
-        pass  # Table may not exist
-
     # Quick links - get dates with completed games
     available_dates = get_available_dates()
 

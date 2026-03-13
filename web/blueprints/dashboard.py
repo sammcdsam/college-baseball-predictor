@@ -53,6 +53,26 @@ def dashboard():
     # Only show scheduled games for tomorrow
     tomorrow_games = [g for g in tomorrow_games if g['status'] == 'scheduled'][:10]
 
+    # Broadcast info for featured team's current/next game
+    featured_broadcasts = []
+    try:
+        from web.db import get_connection
+        conn_bc = get_connection()
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        bc_rows = conn_bc.execute("""
+            SELECT gb.broadcast_type, gb.provider, gb.url
+            FROM game_broadcasts gb
+            JOIN games g ON gb.game_id = g.id
+            WHERE gb.team_id = ?
+            AND g.date = ?
+            ORDER BY CASE gb.broadcast_type
+                WHEN 'tv' THEN 1 WHEN 'streaming' THEN 2 WHEN 'radio' THEN 3 ELSE 4 END
+        """, (featured_team, today_str)).fetchall()
+        featured_broadcasts = [dict(r) for r in bc_rows]
+        conn_bc.close()
+    except Exception:
+        pass
+
     result = render_template('dashboard.html',
                           todays_games=todays_games,
                           value_picks=value_picks,
@@ -63,6 +83,7 @@ def dashboard():
                           recent_results=recent_results,
                           tomorrow_games=tomorrow_games,
                           tomorrow_date=tomorrow_str,
+                          featured_broadcasts=featured_broadcasts,
                           today=datetime.now().strftime('%B %d, %Y'))
     cache.set(cache_key, result, timeout=600)
     return result
