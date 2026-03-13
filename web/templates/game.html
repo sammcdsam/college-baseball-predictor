@@ -61,6 +61,23 @@
             <span class="badge" style="background-color:{{ gqi_color }};font-size:.75rem">GQI {{ gqi }} &mdash; {{ gqi_label }}</span>
         </div>
         {% endif %}
+        {% if broadcasts %}
+        <div class="mt-2 d-flex justify-content-center gap-2 flex-wrap">
+            {% for bc in broadcasts %}
+            {% if bc.url %}
+            <a href="{{ bc.url }}" target="_blank" rel="noopener" class="badge text-decoration-none {% if bc.broadcast_type == 'tv' %}bg-primary{% elif bc.broadcast_type == 'streaming' %}bg-info text-dark{% elif bc.broadcast_type == 'radio' %}bg-secondary{% else %}bg-dark{% endif %}" style="font-size:0.75rem;" data-no-card-nav="1">
+                {% if bc.broadcast_type == 'tv' %}📺{% elif bc.broadcast_type == 'streaming' %}💻{% elif bc.broadcast_type == 'radio' %}📻{% endif %}
+                {{ bc.provider }}
+            </a>
+            {% else %}
+            <span class="badge {% if bc.broadcast_type == 'tv' %}bg-primary{% elif bc.broadcast_type == 'streaming' %}bg-info text-dark{% else %}bg-secondary{% endif %}" style="font-size:0.75rem;">
+                {% if bc.broadcast_type == 'tv' %}📺{% elif bc.broadcast_type == 'streaming' %}💻{% elif bc.broadcast_type == 'radio' %}📻{% endif %}
+                {{ bc.provider }}
+            </span>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
     </div>
     <div class="card-body">
         {% if game.status == 'final' or game.status == 'in-progress' %}

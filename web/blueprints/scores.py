@@ -585,6 +585,20 @@ def game_detail(game_id):
     except Exception:
         pass
 
+    # Broadcast info (Watch/Listen links)
+    broadcasts = []
+    try:
+        bc_rows = c.execute("""
+            SELECT broadcast_type, provider, url, espn_game_id
+            FROM game_broadcasts
+            WHERE game_id = ?
+            ORDER BY CASE broadcast_type
+                WHEN 'tv' THEN 1 WHEN 'streaming' THEN 2 WHEN 'radio' THEN 3 ELSE 4 END
+        """, (game_id,)).fetchall()
+        broadcasts = [dict(r) for r in bc_rows]
+    except Exception:
+        pass  # Table may not exist yet
+
     return render_template('game.html',
         game=game, home=home, away=away,
         prediction=prediction, models=models_list,
@@ -595,4 +609,5 @@ def game_detail(game_id):
         cross_matchup=cross_matchup,
         resume_impact=resume_impact,
         line_history=line_history,
+        broadcasts=broadcasts,
         gqi=gqi_val, gqi_label=gqi_label(gqi_val), gqi_color=gqi_color(gqi_val))
