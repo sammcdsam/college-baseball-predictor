@@ -1201,11 +1201,59 @@ class StatBroadcastPoller:
             prev_half_state = self._notif_last_half_state.get(game_id)
             prev_score_state = self._notif_last_score_state.get(game_id)
 
-            # First sighting: seed state to avoid startup spam.
+            # First sighting: seed state and send game_start notification.
             if prev_half_state is None or prev_score_state is None:
                 self._notif_last_half_state[game_id] = current_half_state
                 self._notif_last_score_state[game_id] = current_score
                 self._notif_half_start_score[game_id] = current_score
+
+                # --- game_start notification ---
+                if not hasattr(self, '_notif_game_started'):
+                    self._notif_game_started = set()
+                if game_id not in self._notif_game_started:
+                    self._notif_game_started.add(game_id)
+                    try:
+                        row = self.conn.execute(
+                            """
+                            SELECT g.home_team_id, g.away_team_id,
+                                   h.name as home_name, a.name as away_name
+                            FROM games g
+                            JOIN teams h ON g.home_team_id = h.id
+                            JOIN teams a ON g.away_team_id = a.id
+                            WHERE g.id = ?
+                            """,
+                            (game_id,),
+                        ).fetchone()
+                        if row:
+                            from notifications import send_team_notification, ensure_tables, get_team_abbr
+                            home_tid = row['home_team_id'] if hasattr(row, 'keys') else row[0]
+                            away_tid = row['away_team_id'] if hasattr(row, 'keys') else row[1]
+                            home_name = row['home_name'] if hasattr(row, 'keys') else row[2]
+                            away_name = row['away_name'] if hasattr(row, 'keys') else row[3]
+                            home_abbr = get_team_abbr(home_tid, home_name)
+                            away_abbr = get_team_abbr(away_tid, away_name)
+                            ensure_tables(self.conn)
+
+                            start_payload = {
+                                'title': f"⚾ {away_abbr} @ {home_abbr}",
+                                'body': 'Game starting!',
+                                'url': f"/game/{game_id}",
+                                'tag': f"start-{game_id}",
+                                'game_id': game_id,
+                            }
+                            for team_id in (home_tid, away_tid):
+                                dedup = f"game_start:{game_id}:{team_id}"
+                                send_team_notification(
+                                    team_id,
+                                    'game_start',
+                                    start_payload,
+                                    dedup_key=dedup,
+                                    conn=self.conn,
+                                )
+                            logger.info("Sent game_start notification for %s", game_id)
+                    except Exception as e:
+                        logger.error("Error sending game_start for %s: %s", game_id, e)
+
                 return
 
             half_transition = current_half_state != prev_half_state
