@@ -172,6 +172,19 @@ async function initPush() {
         if (subscription) {
             currentSubscription = subscription;
             showGranted();
+
+            // Auto-sync: ensure server has our current endpoint
+            // (catches cases where iOS silently changed the endpoint)
+            try {
+                const sub = subscription.toJSON();
+                await fetch('/api/push/sync-endpoint', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ subscription: sub })
+                });
+            } catch (syncErr) {
+                console.warn('Endpoint sync failed:', syncErr);
+            }
         } else if (Notification.permission === 'denied') {
             showDenied();
         }
@@ -209,6 +222,19 @@ async function enableNotifications() {
         });
 
         currentSubscription = subscription;
+
+        // Auto-register the new endpoint with the server immediately
+        try {
+            const sub = subscription.toJSON();
+            await fetch('/api/push/sync-endpoint', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ subscription: sub })
+            });
+        } catch (syncErr) {
+            console.warn('Auto-sync endpoint failed:', syncErr);
+        }
+
         showGranted();
         showStatus('Notifications enabled! Alerts will use your followed teams from the Teams page.', 'success');
     } catch (err) {

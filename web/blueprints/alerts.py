@@ -1,7 +1,10 @@
 """Alerts blueprint — push notification subscription and preferences."""
 
 import json
+import logging
 from flask import Blueprint, render_template, request, jsonify
+
+logger = logging.getLogger(__name__)
 from scripts.database import get_connection
 from scripts.notifications import (
     ensure_tables, save_subscription, save_preferences,
@@ -145,6 +148,88 @@ def unsubscribe():
     remove_subscription(endpoint, conn)
     conn.close()
     return jsonify({'ok': True})
+
+
+@alerts_bp.route('/api/push/sync-endpoint', methods=['POST'])
+def sync_endpoint():
+    """Sync the browser's current push endpoint with the server.
+
+    If the browser has a new endpoint (e.g. iOS re-issued the token),
+    migrate alert preferences from any old endpoints for the same account
+    and deactivate the old ones.
+    """
+    data = request.get_json()
+    if not data or 'subscription' not in data:
+        return jsonify({'error': 'Missing subscription'}), 400
+
+    sub = data['subscription']
+    endpoint = sub.get('endpoint')
+    keys = sub.get('keys', {})
+
+    if not endpoint or not keys.get('p256dh') or not keys.get('auth'):
+        return jsonify({'error': 'Invalid subscription'}), 400
+
+    conn = get_connection()
+    ensure_tables(conn)
+    ensure_account_tables(conn)
+
+    account_id = get_account_id_for_session(
+        conn,
+        request.cookies.get(SESSION_COOKIE_NAME),
+    )
+
+    # Check if this endpoint already exists
+    existing = conn.execute(
+        "SELECT id FROM push_subscriptions WHERE endpoint = ?", (endpoint,)
+    ).fetchone()
+
+    if existing:
+        # Endpoint already known — just update last_used_at
+        conn.execute(
+            "UPDATE push_subscriptions SET last_used_at = datetime('now'), active = 1 WHERE id = ?",
+            (existing[0],))
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'action': 'existing', 'subscription_id': existing[0]})
+
+    # New endpoint — save it
+    new_sub_id = save_subscription(endpoint, keys, conn, account_id=account_id)
+
+    # Migrate preferences from old endpoints for the same account
+    if account_id:
+        old_subs = conn.execute("""
+            SELECT id FROM push_subscriptions
+            WHERE account_id = ? AND id != ? AND active = 1
+        """, (account_id, new_sub_id)).fetchall()
+
+        for old_row in old_subs:
+            old_id = old_row[0]
+            # Copy preferences that don't already exist on the new sub
+            old_prefs = conn.execute(
+                "SELECT alert_type, team_id, game_id, enabled FROM alert_preferences WHERE subscription_id = ?",
+                (old_id,)
+            ).fetchall()
+
+            for pref in old_prefs:
+                conn.execute("""
+                    INSERT OR IGNORE INTO alert_preferences (subscription_id, alert_type, team_id, game_id, enabled)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (new_sub_id, pref[0], pref[1], pref[2], pref[3]))
+
+            # Deactivate old endpoint
+            conn.execute(
+                "UPDATE push_subscriptions SET active = 0 WHERE id = ?", (old_id,))
+
+        conn.commit()
+
+        migrated = len(old_subs)
+        if migrated:
+            logger.info("Migrated preferences from %d old sub(s) to new sub %d for account %d",
+                        migrated, new_sub_id, account_id)
+
+    conn.close()
+    return jsonify({'ok': True, 'action': 'migrated' if account_id and old_subs else 'new',
+                    'subscription_id': new_sub_id})
 
 
 @alerts_bp.route('/api/push/test', methods=['POST'])
